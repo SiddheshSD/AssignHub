@@ -50,8 +50,8 @@ export default function AddSubjectScreen({ navigation }) {
 
     const [name, setName] = useState('');
     const [code, setCode] = useState('');
-    const [assignments, setAssignments] = useState(5);
-    const [experiments, setExperiments] = useState(3);
+    const [assignments, setAssignments] = useState(6);
+    const [experiments, setExperiments] = useState(10);
     const [saving, setSaving] = useState(false);
 
     const handleSave = async () => {

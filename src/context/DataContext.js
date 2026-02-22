@@ -55,6 +55,50 @@ export const DataProvider = ({ children }) => {
         await persist(updated);
     }, [subjects, persist]);
 
+    const updateSubject = useCallback(async (subjectId, { code, totalAssignments, totalExperiments }) => {
+        const updated = subjects.map((s) => {
+            if (s.id !== subjectId) return s;
+
+            // Resize assignments: keep existing, add new or trim
+            let newAssignments = [...s.assignments];
+            if (totalAssignments > newAssignments.length) {
+                for (let i = newAssignments.length; i < totalAssignments; i++) {
+                    newAssignments.push({
+                        id: generateId(),
+                        label: `Assignment ${i + 1}`,
+                        status: 'not_given',
+                    });
+                }
+            } else if (totalAssignments < newAssignments.length) {
+                newAssignments = newAssignments.slice(0, totalAssignments);
+            }
+
+            // Resize experiments: keep existing, add new or trim
+            let newExperiments = [...s.experiments];
+            if (totalExperiments > newExperiments.length) {
+                for (let i = newExperiments.length; i < totalExperiments; i++) {
+                    newExperiments.push({
+                        id: generateId(),
+                        label: `Experiment ${i + 1}`,
+                        status: 'not_given',
+                    });
+                }
+            } else if (totalExperiments < newExperiments.length) {
+                newExperiments = newExperiments.slice(0, totalExperiments);
+            }
+
+            return {
+                ...s,
+                code,
+                totalAssignments,
+                totalExperiments,
+                assignments: newAssignments,
+                experiments: newExperiments,
+            };
+        });
+        await persist(updated);
+    }, [subjects, persist]);
+
     const updateItemStatus = useCallback(async (subjectId, itemId, type, newStatus) => {
         const updated = subjects.map((s) => {
             if (s.id !== subjectId) return s;
@@ -108,6 +152,7 @@ export const DataProvider = ({ children }) => {
                 subjects,
                 addSubject,
                 deleteSubject,
+                updateSubject,
                 updateItemStatus,
                 resetAllData,
                 isDuplicateCode,
