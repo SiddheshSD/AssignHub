@@ -16,7 +16,7 @@ import { useTheme } from '../context/ThemeContext';
 import { useData } from '../context/DataContext';
 import { SPACING, RADIUS, FONT_SIZE } from '../constants/theme';
 
-function Stepper({ label, value, onChange, min = 1, max = 20, colors, primary }) {
+function Stepper({ label, value, onChange, min = 0, max = 20, colors, primary }) {
     return (
         <View style={styles.stepperContainer}>
             <Text style={[styles.stepperLabel, { color: colors.text }]}>{label}</Text>
@@ -140,6 +140,7 @@ export default function AddSubjectScreen({ navigation }) {
                         label="Number of Assignments"
                         value={assignments}
                         onChange={setAssignments}
+                        min={0}
                         colors={colors}
                         primary={primary}
                     />
@@ -148,6 +149,7 @@ export default function AddSubjectScreen({ navigation }) {
                         label="Number of Experiments"
                         value={experiments}
                         onChange={setExperiments}
+                        min={0}
                         colors={colors}
                         primary={primary}
                     />

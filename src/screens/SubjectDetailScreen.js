@@ -43,11 +43,32 @@ function StatusBadge({ status, isDark, onPress }) {
     );
 }
 
-function ItemRow({ item, type, subjectId, colors, isDark, updateItemStatus }) {
+function ItemRow({ item, type, subjectId, outOf, colors, isDark, primary, updateItemStatus, updateItemMarks }) {
+    const [marksText, setMarksText] = useState(
+        item.marks !== null && item.marks !== undefined ? String(item.marks) : ''
+    );
+
     const cycleStatus = () => {
         const currentIndex = STATUS_ORDER.indexOf(item.status);
         const nextIndex = (currentIndex + 1) % STATUS_ORDER.length;
         updateItemStatus(subjectId, item.id, type, STATUS_ORDER[nextIndex]);
+    };
+
+    const handleMarksBlur = () => {
+        const trimmed = marksText.trim();
+        if (trimmed === '') {
+            updateItemMarks(subjectId, item.id, type, null);
+            return;
+        }
+        const num = parseFloat(trimmed);
+        if (isNaN(num) || num < 0) {
+            setMarksText('');
+            updateItemMarks(subjectId, item.id, type, null);
+            return;
+        }
+        const clamped = Math.min(num, outOf);
+        setMarksText(String(clamped));
+        updateItemMarks(subjectId, item.id, type, clamped);
     };
 
     return (
@@ -61,12 +82,27 @@ function ItemRow({ item, type, subjectId, colors, isDark, updateItemStatus }) {
                 />
                 <Text style={[styles.itemLabel, { color: colors.text }]}>{item.label}</Text>
             </View>
-            <StatusBadge status={item.status} isDark={isDark} onPress={cycleStatus} />
+            <View style={styles.itemRight}>
+                <View style={[styles.marksWrap, { backgroundColor: colors.surfaceVariant, borderColor: colors.border }]}>
+                    <TextInput
+                        style={[styles.marksInput, { color: colors.text }]}
+                        value={marksText}
+                        onChangeText={setMarksText}
+                        onBlur={handleMarksBlur}
+                        keyboardType="numeric"
+                        placeholder="—"
+                        placeholderTextColor={colors.textTertiary}
+                        maxLength={5}
+                    />
+                    <Text style={[styles.marksOutOf, { color: colors.textTertiary }]}>/{outOf}</Text>
+                </View>
+                <StatusBadge status={item.status} isDark={isDark} onPress={cycleStatus} />
+            </View>
         </View>
     );
 }
 
-function Stepper({ label, value, onChange, min = 1, max = 20, colors, primary }) {
+function Stepper({ label, value, onChange, min = 0, max = 20, colors, primary }) {
     return (
         <View style={styles.stepperContainer}>
             <Text style={[styles.stepperLabel, { color: colors.text }]}>{label}</Text>
@@ -96,14 +132,16 @@ function Stepper({ label, value, onChange, min = 1, max = 20, colors, primary })
 export default function SubjectDetailScreen({ route, navigation }) {
     const { subjectId } = route.params;
     const { colors, isDark, primary } = useTheme();
-    const { subjects, updateItemStatus, deleteSubject, updateSubject } = useData();
+    const { subjects, updateItemStatus, updateItemMarks, deleteSubject, updateSubject } = useData();
     const [activeTab, setActiveTab] = useState('assignments');
     const [editModalVisible, setEditModalVisible] = useState(false);
 
     // Edit form state
     const [editCode, setEditCode] = useState('');
-    const [editAssignments, setEditAssignments] = useState(1);
-    const [editExperiments, setEditExperiments] = useState(1);
+    const [editAssignments, setEditAssignments] = useState(0);
+    const [editExperiments, setEditExperiments] = useState(0);
+    const [editAssignmentOutOf, setEditAssignmentOutOf] = useState(10);
+    const [editExperimentOutOf, setEditExperimentOutOf] = useState(10);
 
     const subject = useMemo(
         () => subjects.find((s) => s.id === subjectId),
@@ -120,16 +158,27 @@ export default function SubjectDetailScreen({ route, navigation }) {
 
     const items = activeTab === 'assignments' ? subject.assignments : subject.experiments;
     const itemType = activeTab === 'assignments' ? 'assignment' : 'experiment';
+    const outOf = activeTab === 'assignments'
+        ? (subject.assignmentOutOf ?? 10)
+        : (subject.experimentOutOf ?? 10);
 
     const doneCount = items.filter(
         (i) => i.status === 'complete' || i.status === 'checked'
     ).length;
     const checkedCount = items.filter((i) => i.status === 'checked').length;
 
+    // Average marks for current tab
+    const itemsWithMarks = items.filter((i) => i.marks !== null && i.marks !== undefined);
+    const avgMarks = itemsWithMarks.length > 0
+        ? (itemsWithMarks.reduce((sum, i) => sum + i.marks, 0) / itemsWithMarks.length).toFixed(1)
+        : null;
+
     const openEditModal = () => {
         setEditCode(subject.code);
         setEditAssignments(subject.assignments.length);
         setEditExperiments(subject.experiments.length);
+        setEditAssignmentOutOf(subject.assignmentOutOf ?? 10);
+        setEditExperimentOutOf(subject.experimentOutOf ?? 10);
         setEditModalVisible(true);
     };
 
@@ -143,6 +192,8 @@ export default function SubjectDetailScreen({ route, navigation }) {
             code: trimmedCode.toUpperCase(),
             totalAssignments: editAssignments,
             totalExperiments: editExperiments,
+            assignmentOutOf: editAssignmentOutOf,
+            experimentOutOf: editExperimentOutOf,
         });
         setEditModalVisible(false);
     };
@@ -209,64 +260,68 @@ export default function SubjectDetailScreen({ route, navigation }) {
                     </View>
                     <View style={[styles.summaryDivider, { backgroundColor: colors.border }]} />
                     <View style={styles.summaryItem}>
-                        <Text style={[styles.summaryValue, { color: COLORS.status.not_given[isDark ? 'dark' : 'light'] }]}>
-                            {items.length - doneCount}
+                        <Text style={[styles.summaryValue, { color: avgMarks !== null ? primary : colors.textTertiary }]}>
+                            {avgMarks !== null ? avgMarks : '—'}
                         </Text>
-                        <Text style={[styles.summaryLabel, { color: colors.textSecondary }]}>Pending</Text>
+                        <Text style={[styles.summaryLabel, { color: colors.textSecondary }]}>Avg/{outOf}</Text>
                     </View>
                 </View>
             </View>
 
             {/* Tabs */}
             <View style={[styles.tabs, { backgroundColor: colors.surfaceVariant }]}>
-                <TouchableOpacity
-                    style={[
-                        styles.tab,
-                        activeTab === 'assignments' && { backgroundColor: colors.card },
-                    ]}
-                    onPress={() => setActiveTab('assignments')}
-                >
-                    <MaterialCommunityIcons
-                        name="file-document-outline"
-                        size={16}
-                        color={activeTab === 'assignments' ? primary : colors.textTertiary}
-                    />
-                    <Text
+                {subject.assignments.length > 0 || activeTab === 'assignments' ? (
+                    <TouchableOpacity
                         style={[
-                            styles.tabText,
-                            {
-                                color: activeTab === 'assignments' ? primary : colors.textTertiary,
-                                fontWeight: activeTab === 'assignments' ? '700' : '500',
-                            },
+                            styles.tab,
+                            activeTab === 'assignments' && { backgroundColor: colors.card },
                         ]}
+                        onPress={() => setActiveTab('assignments')}
                     >
-                        Assignments ({subject.assignments.length})
-                    </Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                    style={[
-                        styles.tab,
-                        activeTab === 'experiments' && { backgroundColor: colors.card },
-                    ]}
-                    onPress={() => setActiveTab('experiments')}
-                >
-                    <MaterialCommunityIcons
-                        name="flask"
-                        size={16}
-                        color={activeTab === 'experiments' ? primary : colors.textTertiary}
-                    />
-                    <Text
+                        <MaterialCommunityIcons
+                            name="file-document-outline"
+                            size={16}
+                            color={activeTab === 'assignments' ? primary : colors.textTertiary}
+                        />
+                        <Text
+                            style={[
+                                styles.tabText,
+                                {
+                                    color: activeTab === 'assignments' ? primary : colors.textTertiary,
+                                    fontWeight: activeTab === 'assignments' ? '700' : '500',
+                                },
+                            ]}
+                        >
+                            Assignments ({subject.assignments.length})
+                        </Text>
+                    </TouchableOpacity>
+                ) : null}
+                {subject.experiments.length > 0 || activeTab === 'experiments' ? (
+                    <TouchableOpacity
                         style={[
-                            styles.tabText,
-                            {
-                                color: activeTab === 'experiments' ? primary : colors.textTertiary,
-                                fontWeight: activeTab === 'experiments' ? '700' : '500',
-                            },
+                            styles.tab,
+                            activeTab === 'experiments' && { backgroundColor: colors.card },
                         ]}
+                        onPress={() => setActiveTab('experiments')}
                     >
-                        Experiments ({subject.experiments.length})
-                    </Text>
-                </TouchableOpacity>
+                        <MaterialCommunityIcons
+                            name="flask"
+                            size={16}
+                            color={activeTab === 'experiments' ? primary : colors.textTertiary}
+                        />
+                        <Text
+                            style={[
+                                styles.tabText,
+                                {
+                                    color: activeTab === 'experiments' ? primary : colors.textTertiary,
+                                    fontWeight: activeTab === 'experiments' ? '700' : '500',
+                                },
+                            ]}
+                        >
+                            Experiments ({subject.experiments.length})
+                        </Text>
+                    </TouchableOpacity>
+                ) : null}
             </View>
 
             {/* Items List */}
@@ -274,41 +329,62 @@ export default function SubjectDetailScreen({ route, navigation }) {
                 showsVerticalScrollIndicator={false}
                 contentContainerStyle={styles.itemsList}
             >
-                <View style={[styles.itemsCard, { backgroundColor: colors.card, shadowColor: colors.shadow }]}>
-                    {items.map((item, index) => (
-                        <ItemRow
-                            key={item.id}
-                            item={item}
-                            type={itemType}
-                            subjectId={subjectId}
-                            colors={colors}
-                            isDark={isDark}
-                            updateItemStatus={updateItemStatus}
-                        />
-                    ))}
-                </View>
-
-                {/* Legend */}
-                <View style={styles.legend}>
-                    <Text style={[styles.legendTitle, { color: colors.textTertiary }]}>
-                        Tap status to cycle
-                    </Text>
-                    <View style={styles.legendItems}>
-                        {STATUS_ORDER.map((status) => (
-                            <View key={status} style={styles.legendItem}>
-                                <View
-                                    style={[
-                                        styles.legendDot,
-                                        { backgroundColor: COLORS.status[status][isDark ? 'dark' : 'light'] },
-                                    ]}
-                                />
-                                <Text style={[styles.legendText, { color: colors.textTertiary }]}>
-                                    {STATUS_LABELS[status]}
-                                </Text>
-                            </View>
+                {items.length > 0 ? (
+                    <View style={[styles.itemsCard, { backgroundColor: colors.card, shadowColor: colors.shadow }]}>
+                        {items.map((item) => (
+                            <ItemRow
+                                key={item.id}
+                                item={item}
+                                type={itemType}
+                                subjectId={subjectId}
+                                outOf={outOf}
+                                colors={colors}
+                                isDark={isDark}
+                                primary={primary}
+                                updateItemStatus={updateItemStatus}
+                                updateItemMarks={updateItemMarks}
+                            />
                         ))}
                     </View>
-                </View>
+                ) : (
+                    <View style={[styles.emptyItems, { backgroundColor: colors.card, shadowColor: colors.shadow }]}>
+                        <MaterialCommunityIcons
+                            name={activeTab === 'assignments' ? 'file-document-outline' : 'flask-outline'}
+                            size={40}
+                            color={colors.textTertiary}
+                        />
+                        <Text style={[styles.emptyItemsText, { color: colors.textSecondary }]}>
+                            No {activeTab} for this subject
+                        </Text>
+                        <Text style={[styles.emptyItemsHint, { color: colors.textTertiary }]}>
+                            Tap the edit button to add some
+                        </Text>
+                    </View>
+                )}
+
+                {/* Legend */}
+                {items.length > 0 && (
+                    <View style={styles.legend}>
+                        <Text style={[styles.legendTitle, { color: colors.textTertiary }]}>
+                            Tap status to cycle • Enter marks out of {outOf}
+                        </Text>
+                        <View style={styles.legendItems}>
+                            {STATUS_ORDER.map((status) => (
+                                <View key={status} style={styles.legendItem}>
+                                    <View
+                                        style={[
+                                            styles.legendDot,
+                                            { backgroundColor: COLORS.status[status][isDark ? 'dark' : 'light'] },
+                                        ]}
+                                    />
+                                    <Text style={[styles.legendText, { color: colors.textTertiary }]}>
+                                        {STATUS_LABELS[status]}
+                                    </Text>
+                                </View>
+                            ))}
+                        </View>
+                    </View>
+                )}
             </ScrollView>
 
             {/* Edit Modal */}
@@ -365,6 +441,18 @@ export default function SubjectDetailScreen({ route, navigation }) {
                                 label="Assignments"
                                 value={editAssignments}
                                 onChange={setEditAssignments}
+                                min={0}
+                                colors={colors}
+                                primary={primary}
+                            />
+
+                            {/* Assignment Out Of */}
+                            <Stepper
+                                label="Assignment Marks (Out Of)"
+                                value={editAssignmentOutOf}
+                                onChange={setEditAssignmentOutOf}
+                                min={1}
+                                max={100}
                                 colors={colors}
                                 primary={primary}
                             />
@@ -374,6 +462,18 @@ export default function SubjectDetailScreen({ route, navigation }) {
                                 label="Experiments"
                                 value={editExperiments}
                                 onChange={setEditExperiments}
+                                min={0}
+                                colors={colors}
+                                primary={primary}
+                            />
+
+                            {/* Experiment Out Of */}
+                            <Stepper
+                                label="Experiment Marks (Out Of)"
+                                value={editExperimentOutOf}
+                                onChange={setEditExperimentOutOf}
+                                min={1}
+                                max={100}
                                 colors={colors}
                                 primary={primary}
                             />
@@ -463,13 +563,29 @@ const styles = StyleSheet.create({
         flexDirection: 'row',
         alignItems: 'center',
         justifyContent: 'space-between',
-        paddingHorizontal: SPACING.lg,
-        paddingVertical: SPACING.md + 2,
+        paddingHorizontal: SPACING.md,
+        paddingVertical: SPACING.sm + 2,
         borderBottomWidth: StyleSheet.hairlineWidth,
     },
     itemLeft: { flexDirection: 'row', alignItems: 'center', flex: 1 },
-    itemDot: { width: 8, height: 8, borderRadius: 4, marginRight: SPACING.md },
-    itemLabel: { fontSize: FONT_SIZE.md, fontWeight: '500' },
+    itemDot: { width: 8, height: 8, borderRadius: 4, marginRight: SPACING.sm },
+    itemLabel: { fontSize: FONT_SIZE.sm, fontWeight: '500' },
+    itemRight: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+    marksWrap: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        borderRadius: RADIUS.sm,
+        borderWidth: 1,
+        paddingHorizontal: 6,
+        paddingVertical: 2,
+    },
+    marksInput: {
+        fontSize: FONT_SIZE.xs,
+        width: 28,
+        textAlign: 'center',
+        paddingVertical: 2,
+    },
+    marksOutOf: { fontSize: FONT_SIZE.xs },
     badge: {
         flexDirection: 'row',
         alignItems: 'center',
@@ -479,8 +595,19 @@ const styles = StyleSheet.create({
         borderWidth: 1,
     },
     badgeText: { fontSize: FONT_SIZE.xs, fontWeight: '600', marginLeft: 4 },
+    emptyItems: {
+        borderRadius: RADIUS.lg,
+        padding: SPACING.xxxl,
+        alignItems: 'center',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 1,
+        shadowRadius: 8,
+        elevation: 3,
+    },
+    emptyItemsText: { fontSize: FONT_SIZE.md, fontWeight: '600', marginTop: SPACING.md },
+    emptyItemsHint: { fontSize: FONT_SIZE.xs, marginTop: SPACING.xs },
     legend: { marginTop: SPACING.xl, alignItems: 'center' },
-    legendTitle: { fontSize: FONT_SIZE.xs, marginBottom: SPACING.sm },
+    legendTitle: { fontSize: FONT_SIZE.xs, marginBottom: SPACING.sm, textAlign: 'center' },
     legendItems: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center' },
     legendItem: { flexDirection: 'row', alignItems: 'center', marginHorizontal: SPACING.sm, marginBottom: SPACING.xs },
     legendDot: { width: 8, height: 8, borderRadius: 4, marginRight: SPACING.xs },
@@ -498,7 +625,7 @@ const styles = StyleSheet.create({
     },
     modalContent: {
         width: '88%',
-        maxHeight: '80%',
+        maxHeight: '85%',
         borderRadius: RADIUS.xl,
         padding: SPACING.xl,
         elevation: 10,

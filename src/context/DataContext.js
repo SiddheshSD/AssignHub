@@ -27,22 +27,28 @@ export const DataProvider = ({ children }) => {
             id: generateId(),
             label: `Assignment ${i + 1}`,
             status: 'not_given',
+            marks: null,
         }));
         const experiments = Array.from({ length: totalExperiments }, (_, i) => ({
             id: generateId(),
             label: `Experiment ${i + 1}`,
             status: 'not_given',
+            marks: null,
         }));
 
+        const now = Date.now();
         const newSubject = {
             id: generateId(),
             name,
             code,
             totalAssignments,
             totalExperiments,
+            assignmentOutOf: 10,
+            experimentOutOf: 10,
             assignments,
             experiments,
-            createdAt: Date.now(),
+            createdAt: now,
+            updatedAt: now,
         };
 
         const updated = [...subjects, newSubject];
@@ -55,7 +61,7 @@ export const DataProvider = ({ children }) => {
         await persist(updated);
     }, [subjects, persist]);
 
-    const updateSubject = useCallback(async (subjectId, { code, totalAssignments, totalExperiments }) => {
+    const updateSubject = useCallback(async (subjectId, { code, totalAssignments, totalExperiments, assignmentOutOf, experimentOutOf }) => {
         const updated = subjects.map((s) => {
             if (s.id !== subjectId) return s;
 
@@ -67,6 +73,7 @@ export const DataProvider = ({ children }) => {
                         id: generateId(),
                         label: `Assignment ${i + 1}`,
                         status: 'not_given',
+                        marks: null,
                     });
                 }
             } else if (totalAssignments < newAssignments.length) {
@@ -81,6 +88,7 @@ export const DataProvider = ({ children }) => {
                         id: generateId(),
                         label: `Experiment ${i + 1}`,
                         status: 'not_given',
+                        marks: null,
                     });
                 }
             } else if (totalExperiments < newExperiments.length) {
@@ -92,8 +100,11 @@ export const DataProvider = ({ children }) => {
                 code,
                 totalAssignments,
                 totalExperiments,
+                assignmentOutOf: assignmentOutOf ?? s.assignmentOutOf ?? 10,
+                experimentOutOf: experimentOutOf ?? s.experimentOutOf ?? 10,
                 assignments: newAssignments,
                 experiments: newExperiments,
+                updatedAt: Date.now(),
             };
         });
         await persist(updated);
@@ -108,6 +119,22 @@ export const DataProvider = ({ children }) => {
                 [key]: s[key].map((item) =>
                     item.id === itemId ? { ...item, status: newStatus } : item
                 ),
+                updatedAt: Date.now(),
+            };
+        });
+        await persist(updated);
+    }, [subjects, persist]);
+
+    const updateItemMarks = useCallback(async (subjectId, itemId, type, marks) => {
+        const updated = subjects.map((s) => {
+            if (s.id !== subjectId) return s;
+            const key = type === 'assignment' ? 'assignments' : 'experiments';
+            return {
+                ...s,
+                [key]: s[key].map((item) =>
+                    item.id === itemId ? { ...item, marks } : item
+                ),
+                updatedAt: Date.now(),
             };
         });
         await persist(updated);
@@ -122,27 +149,18 @@ export const DataProvider = ({ children }) => {
     }, [subjects]);
 
     // Computed stats
+    const allItems = subjects.flatMap((s) => [...s.assignments, ...s.experiments]);
     const totalAssignments = subjects.reduce((sum, s) => sum + s.assignments.length, 0);
     const totalExperiments = subjects.reduce((sum, s) => sum + s.experiments.length, 0);
-    const completedAssignments = subjects.reduce(
-        (sum, s) => sum + s.assignments.filter((a) => a.status === 'checked' || a.status === 'complete').length,
-        0
-    );
-    const completedExperiments = subjects.reduce(
-        (sum, s) => sum + s.experiments.filter((e) => e.status === 'checked' || e.status === 'complete').length,
-        0
-    );
-    const totalItems = totalAssignments + totalExperiments;
-    const completedItems = completedAssignments + completedExperiments;
-    const completionPercentage = totalItems > 0 ? Math.round((completedItems / totalItems) * 100) : 0;
+    const totalItems = allItems.length;
 
-    const checkedAssignments = subjects.reduce(
-        (sum, s) => sum + s.assignments.filter((a) => a.status === 'checked').length, 0
-    );
-    const checkedExperiments = subjects.reduce(
-        (sum, s) => sum + s.experiments.filter((e) => e.status === 'checked').length, 0
-    );
-    const checkedItems = checkedAssignments + checkedExperiments;
+    const notGivenCount = allItems.filter((i) => i.status === 'not_given').length;
+    const incompleteCount = allItems.filter((i) => i.status === 'incomplete').length;
+    const completeCount = allItems.filter((i) => i.status === 'complete').length;
+    const checkedCount = allItems.filter((i) => i.status === 'checked').length;
+
+    const completedItems = completeCount + checkedCount;
+    const completionPercentage = totalItems > 0 ? Math.round((completedItems / totalItems) * 100) : 0;
 
     if (!isLoaded) return null;
 
@@ -154,18 +172,21 @@ export const DataProvider = ({ children }) => {
                 deleteSubject,
                 updateSubject,
                 updateItemStatus,
+                updateItemMarks,
                 resetAllData,
                 isDuplicateCode,
                 stats: {
                     totalSubjects: subjects.length,
                     totalAssignments,
                     totalExperiments,
-                    completedAssignments,
-                    completedExperiments,
                     completedItems,
-                    checkedItems,
+                    checkedItems: checkedCount,
                     totalItems,
                     completionPercentage,
+                    notGivenCount,
+                    incompleteCount,
+                    completeCount,
+                    checkedCount,
                 },
             }}
         >
