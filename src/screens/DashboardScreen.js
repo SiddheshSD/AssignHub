@@ -297,9 +297,25 @@ function StatCard({ icon, label, value, color, colors }) {
     );
 }
 
+function formatDeadlineDate(dateStr) {
+    if (!dateStr) return '';
+    const d = new Date(dateStr);
+    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    return `${d.getDate()} ${months[d.getMonth()]}`;
+}
+
+function getDaysUntil(dateStr) {
+    if (!dateStr) return null;
+    const now = new Date();
+    now.setHours(0, 0, 0, 0);
+    const target = new Date(dateStr);
+    target.setHours(0, 0, 0, 0);
+    return Math.ceil((target - now) / (1000 * 60 * 60 * 24));
+}
+
 export default function DashboardScreen() {
     const { colors, primary, isDark } = useTheme();
-    const { subjects, stats } = useData();
+    const { subjects, stats, upcomingDeadlines } = useData();
     const navigation = useNavigation();
 
     const themeKey = isDark ? 'dark' : 'light';
@@ -426,6 +442,55 @@ export default function DashboardScreen() {
                         colors={colors}
                     />
                 </View>
+
+                {/* Upcoming Deadlines */}
+                {upcomingDeadlines && upcomingDeadlines.length > 0 && (
+                    <View style={[styles.deadlinesCard, { backgroundColor: colors.card, shadowColor: colors.shadow }]}>
+                        <View style={styles.deadlinesHeader}>
+                            <Text style={[styles.sectionTitle, { color: colors.text, marginBottom: 0 }]}>Upcoming Deadlines</Text>
+                            <View style={[styles.deadlineCountBadge, { backgroundColor: primary + '18' }]}>
+                                <Text style={[styles.deadlineCountText, { color: primary }]}>
+                                    {upcomingDeadlines.length}
+                                </Text>
+                            </View>
+                        </View>
+                        {upcomingDeadlines.slice(0, 5).map((item) => {
+                            const days = getDaysUntil(item.submissionDate);
+                            const parentSubject = subjects.find(s =>
+                                s.assignments.some(a => a.id === item.id) ||
+                                s.experiments.some(e => e.id === item.id)
+                            );
+                            let urgencyColor;
+                            if (days <= 1) urgencyColor = isDark ? '#F87171' : '#EF4444';
+                            else if (days <= 3) urgencyColor = isDark ? '#FFB74D' : '#FF9800';
+                            else urgencyColor = isDark ? '#81C784' : '#4CAF50';
+
+                            return (
+                                <TouchableOpacity
+                                    key={item.id}
+                                    style={[styles.deadlineRow, { borderBottomColor: colors.border }]}
+                                    activeOpacity={0.7}
+                                    onPress={() => parentSubject && handleSubjectPress(parentSubject.id)}
+                                >
+                                    <View style={[styles.deadlineDot, { backgroundColor: urgencyColor }]} />
+                                    <View style={styles.deadlineInfo}>
+                                        <Text style={[styles.deadlineItemLabel, { color: colors.text }]} numberOfLines={1}>
+                                            {item.label}
+                                        </Text>
+                                        <Text style={[styles.deadlineSubject, { color: colors.textTertiary }]}>
+                                            {parentSubject ? parentSubject.name : ''} • {formatDeadlineDate(item.submissionDate)}
+                                        </Text>
+                                    </View>
+                                    <View style={[styles.deadlineDaysBadge, { backgroundColor: urgencyColor + '18' }]}>
+                                        <Text style={[styles.deadlineDaysText, { color: urgencyColor }]}>
+                                            {days === 0 ? 'Today' : days === 1 ? '1d' : `${days}d`}
+                                        </Text>
+                                    </View>
+                                </TouchableOpacity>
+                            );
+                        })}
+                    </View>
+                )}
 
                 {/* Recent Subjects */}
                 {recentSubjects.length > 0 && (
@@ -635,4 +700,63 @@ const styles = StyleSheet.create({
     },
     emptyTitle: { fontSize: FONT_SIZE.lg, fontWeight: '700', marginTop: SPACING.md },
     emptySubtitle: { fontSize: FONT_SIZE.sm, textAlign: 'center', marginTop: SPACING.xs },
+
+    // Upcoming Deadlines
+    deadlinesCard: {
+        borderRadius: RADIUS.lg,
+        padding: SPACING.xl,
+        marginBottom: SPACING.lg,
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 1,
+        shadowRadius: 8,
+        elevation: 4,
+    },
+    deadlinesHeader: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        marginBottom: SPACING.md,
+    },
+    deadlineCountBadge: {
+        paddingHorizontal: 8,
+        paddingVertical: 2,
+        borderRadius: RADIUS.full,
+    },
+    deadlineCountText: {
+        fontSize: FONT_SIZE.xs,
+        fontWeight: '700',
+    },
+    deadlineRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        paddingVertical: SPACING.sm + 2,
+        borderBottomWidth: StyleSheet.hairlineWidth,
+    },
+    deadlineDot: {
+        width: 8,
+        height: 8,
+        borderRadius: 4,
+        marginRight: SPACING.sm,
+    },
+    deadlineInfo: {
+        flex: 1,
+    },
+    deadlineItemLabel: {
+        fontSize: FONT_SIZE.sm,
+        fontWeight: '600',
+    },
+    deadlineSubject: {
+        fontSize: FONT_SIZE.xs,
+        marginTop: 1,
+    },
+    deadlineDaysBadge: {
+        paddingHorizontal: 8,
+        paddingVertical: 3,
+        borderRadius: RADIUS.sm,
+        marginLeft: SPACING.sm,
+    },
+    deadlineDaysText: {
+        fontSize: FONT_SIZE.xs,
+        fontWeight: '700',
+    },
 });

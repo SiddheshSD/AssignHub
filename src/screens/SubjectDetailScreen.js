@@ -10,6 +10,7 @@ import {
     TextInput,
     Platform,
     KeyboardAvoidingView,
+    FlatList,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
@@ -24,6 +25,7 @@ import {
     STATUS_ICONS,
     STATUS_ORDER,
 } from '../constants/theme';
+import { pickDocuments, saveFiles, deleteFile, openFile, formatFileSize, getFileIcon, getFileColor } from '../services/fileManager';
 
 function StatusBadge({ status, isDark, onPress }) {
     const themeKey = isDark ? 'dark' : 'light';
@@ -43,7 +45,55 @@ function StatusBadge({ status, isDark, onPress }) {
     );
 }
 
-function ItemRow({ item, type, subjectId, outOf, colors, isDark, primary, updateItemStatus, updateItemMarks }) {
+function formatDate(dateStr) {
+    if (!dateStr) return null;
+    const d = new Date(dateStr);
+    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    return `${d.getDate()} ${months[d.getMonth()]} ${d.getFullYear()}`;
+}
+
+function getDaysUntil(dateStr) {
+    if (!dateStr) return null;
+    const now = new Date();
+    now.setHours(0, 0, 0, 0);
+    const target = new Date(dateStr);
+    target.setHours(0, 0, 0, 0);
+    const diff = Math.ceil((target - now) / (1000 * 60 * 60 * 24));
+    return diff;
+}
+
+function DeadlineBadge({ submissionDate, isDark }) {
+    if (!submissionDate) return null;
+    const days = getDaysUntil(submissionDate);
+    if (days === null) return null;
+
+    let color, text;
+    if (days < 0) {
+        color = isDark ? '#F87171' : '#EF4444';
+        text = `Overdue`;
+    } else if (days === 0) {
+        color = isDark ? '#F87171' : '#EF4444';
+        text = 'Due Today';
+    } else if (days === 1) {
+        color = isDark ? '#FFB74D' : '#FF9800';
+        text = 'Tomorrow';
+    } else if (days <= 3) {
+        color = isDark ? '#FFB74D' : '#FF9800';
+        text = `${days}d left`;
+    } else {
+        color = isDark ? '#81C784' : '#4CAF50';
+        text = `${days}d left`;
+    }
+
+    return (
+        <View style={[styles.deadlineBadge, { backgroundColor: color + '18' }]}>
+            <MaterialCommunityIcons name="clock-outline" size={10} color={color} />
+            <Text style={[styles.deadlineBadgeText, { color }]}>{text}</Text>
+        </View>
+    );
+}
+
+function ItemRow({ item, type, subjectId, subjectCode, outOf, colors, isDark, primary, updateItemStatus, updateItemMarks, updateItemSubmissionDate, updateItemFiles, onOpenFiles }) {
     const [marksText, setMarksText] = useState(
         item.marks !== null && item.marks !== undefined ? String(item.marks) : ''
     );
@@ -71,32 +121,80 @@ function ItemRow({ item, type, subjectId, outOf, colors, isDark, primary, update
         updateItemMarks(subjectId, item.id, type, clamped);
     };
 
+    const handleDatePress = () => {
+        // Show a simple date picker using Alert prompt approach
+        // We'll show a modal-like date input
+        onOpenFiles(item, 'date');
+    };
+
+    const handleFilesPress = () => {
+        onOpenFiles(item, 'files');
+    };
+
+    const fileCount = (item.files || []).length;
+
     return (
         <View style={[styles.itemRow, { borderBottomColor: colors.border }]}>
-            <View style={styles.itemLeft}>
-                <View
-                    style={[
-                        styles.itemDot,
-                        { backgroundColor: COLORS.status[item.status][isDark ? 'dark' : 'light'] },
-                    ]}
-                />
-                <Text style={[styles.itemLabel, { color: colors.text }]}>{item.label}</Text>
-            </View>
-            <View style={styles.itemRight}>
-                <View style={[styles.marksWrap, { backgroundColor: colors.surfaceVariant, borderColor: colors.border }]}>
-                    <TextInput
-                        style={[styles.marksInput, { color: colors.text }]}
-                        value={marksText}
-                        onChangeText={setMarksText}
-                        onBlur={handleMarksBlur}
-                        keyboardType="numeric"
-                        placeholder="—"
-                        placeholderTextColor={colors.textTertiary}
-                        maxLength={5}
+            <View style={styles.itemTopRow}>
+                <View style={styles.itemLeft}>
+                    <View
+                        style={[
+                            styles.itemDot,
+                            { backgroundColor: COLORS.status[item.status][isDark ? 'dark' : 'light'] },
+                        ]}
                     />
-                    <Text style={[styles.marksOutOf, { color: colors.textTertiary }]}>/{outOf}</Text>
+                    <View style={styles.itemLabelWrap}>
+                        <Text style={[styles.itemLabel, { color: colors.text }]}>{item.label}</Text>
+                        <DeadlineBadge submissionDate={item.submissionDate} isDark={isDark} />
+                    </View>
                 </View>
-                <StatusBadge status={item.status} isDark={isDark} onPress={cycleStatus} />
+                <View style={styles.itemRight}>
+                    <View style={[styles.marksWrap, { backgroundColor: colors.surfaceVariant, borderColor: colors.border }]}>
+                        <TextInput
+                            style={[styles.marksInput, { color: colors.text }]}
+                            value={marksText}
+                            onChangeText={setMarksText}
+                            onBlur={handleMarksBlur}
+                            keyboardType="numeric"
+                            placeholder="—"
+                            placeholderTextColor={colors.textTertiary}
+                            maxLength={5}
+                        />
+                        <Text style={[styles.marksOutOf, { color: colors.textTertiary }]}>/{outOf}</Text>
+                    </View>
+                    <StatusBadge status={item.status} isDark={isDark} onPress={cycleStatus} />
+                </View>
+            </View>
+            {/* Bottom action row: date + files */}
+            <View style={styles.itemBottomRow}>
+                <TouchableOpacity
+                    style={[styles.itemActionBtn, { backgroundColor: colors.surfaceVariant }]}
+                    onPress={handleDatePress}
+                    activeOpacity={0.7}
+                >
+                    <MaterialCommunityIcons
+                        name="calendar-clock"
+                        size={13}
+                        color={item.submissionDate ? primary : colors.textTertiary}
+                    />
+                    <Text style={[styles.itemActionText, { color: item.submissionDate ? primary : colors.textTertiary }]}>
+                        {item.submissionDate ? formatDate(item.submissionDate) : 'Set Date'}
+                    </Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                    style={[styles.itemActionBtn, { backgroundColor: colors.surfaceVariant }]}
+                    onPress={handleFilesPress}
+                    activeOpacity={0.7}
+                >
+                    <MaterialCommunityIcons
+                        name="paperclip"
+                        size={13}
+                        color={fileCount > 0 ? primary : colors.textTertiary}
+                    />
+                    <Text style={[styles.itemActionText, { color: fileCount > 0 ? primary : colors.textTertiary }]}>
+                        {fileCount > 0 ? `${fileCount} file${fileCount > 1 ? 's' : ''}` : 'Attach'}
+                    </Text>
+                </TouchableOpacity>
             </View>
         </View>
     );
@@ -129,12 +227,57 @@ function Stepper({ label, value, onChange, min = 0, max = 20, colors, primary })
     );
 }
 
+function FileItem({ file, colors, onOpen, onDelete }) {
+    const iconName = getFileIcon(file.mimeType);
+    const iconColor = getFileColor(file.mimeType);
+
+    return (
+        <View style={[styles.fileItem, { borderBottomColor: colors.border }]}>
+            <TouchableOpacity
+                style={styles.fileItemContent}
+                onPress={() => onOpen(file)}
+                activeOpacity={0.7}
+            >
+                <View style={[styles.fileIcon, { backgroundColor: iconColor + '18' }]}>
+                    <MaterialCommunityIcons name={iconName} size={22} color={iconColor} />
+                </View>
+                <View style={styles.fileInfo}>
+                    <Text style={[styles.fileName, { color: colors.text }]} numberOfLines={1}>
+                        {file.originalName || file.name}
+                    </Text>
+                    <Text style={[styles.fileSize, { color: colors.textTertiary }]}>
+                        {formatFileSize(file.size)}
+                    </Text>
+                </View>
+            </TouchableOpacity>
+            <TouchableOpacity
+                style={styles.fileDeleteBtn}
+                onPress={() => onDelete(file)}
+                activeOpacity={0.7}
+            >
+                <MaterialCommunityIcons name="close-circle" size={20} color={colors.textTertiary} />
+            </TouchableOpacity>
+        </View>
+    );
+}
+
 export default function SubjectDetailScreen({ route, navigation }) {
     const { subjectId } = route.params;
     const { colors, isDark, primary } = useTheme();
-    const { subjects, updateItemStatus, updateItemMarks, deleteSubject, updateSubject } = useData();
+    const { subjects, updateItemStatus, updateItemMarks, updateItemSubmissionDate, updateItemFiles, deleteSubject, updateSubject } = useData();
     const [activeTab, setActiveTab] = useState('assignments');
     const [editModalVisible, setEditModalVisible] = useState(false);
+
+    // Date picker modal states
+    const [dateModalVisible, setDateModalVisible] = useState(false);
+    const [dateTargetItem, setDateTargetItem] = useState(null);
+    const [dateDay, setDateDay] = useState('');
+    const [dateMonth, setDateMonth] = useState('');
+    const [dateYear, setDateYear] = useState('');
+
+    // Files modal states
+    const [filesModalVisible, setFilesModalVisible] = useState(false);
+    const [filesTargetItem, setFilesTargetItem] = useState(null);
 
     // Edit form state
     const [editCode, setEditCode] = useState('');
@@ -216,6 +359,109 @@ export default function SubjectDetailScreen({ route, navigation }) {
             ]
         );
     };
+
+    // Date modal handlers
+    const openDateModal = (item) => {
+        setDateTargetItem(item);
+        if (item.submissionDate) {
+            const d = new Date(item.submissionDate);
+            setDateDay(String(d.getDate()));
+            setDateMonth(String(d.getMonth() + 1));
+            setDateYear(String(d.getFullYear()));
+        } else {
+            const now = new Date();
+            setDateDay('');
+            setDateMonth('');
+            setDateYear(String(now.getFullYear()));
+        }
+        setDateModalVisible(true);
+    };
+
+    const handleSaveDate = async () => {
+        const day = parseInt(dateDay);
+        const month = parseInt(dateMonth);
+        const year = parseInt(dateYear);
+
+        if (!day || !month || !year || day < 1 || day > 31 || month < 1 || month > 12 || year < 2024) {
+            Alert.alert('Invalid Date', 'Please enter a valid date (DD/MM/YYYY).');
+            return;
+        }
+
+        const date = new Date(year, month - 1, day, 23, 59, 59);
+        if (isNaN(date.getTime())) {
+            Alert.alert('Invalid Date', 'Please enter a valid date.');
+            return;
+        }
+
+        await updateItemSubmissionDate(subjectId, dateTargetItem.id, itemType, date.toISOString());
+        setDateModalVisible(false);
+        setDateTargetItem(null);
+    };
+
+    const handleClearDate = async () => {
+        await updateItemSubmissionDate(subjectId, dateTargetItem.id, itemType, null);
+        setDateModalVisible(false);
+        setDateTargetItem(null);
+    };
+
+    // Files modal handlers
+    const openFilesModal = (item) => {
+        setFilesTargetItem(item);
+        setFilesModalVisible(true);
+    };
+
+    const handleOpenItemAction = (item, action) => {
+        if (action === 'date') {
+            openDateModal(item);
+        } else if (action === 'files') {
+            openFilesModal(item);
+        }
+    };
+
+    const handlePickFiles = async () => {
+        const picked = await pickDocuments();
+        if (picked.length === 0) return;
+
+        const currentFiles = filesTargetItem.files || [];
+        const saved = await saveFiles(picked, subject.code, filesTargetItem.label, currentFiles);
+        if (saved.length > 0) {
+            const updatedFiles = [...currentFiles, ...saved];
+            await updateItemFiles(subjectId, filesTargetItem.id, itemType, updatedFiles);
+            // Update the local target item reference
+            setFilesTargetItem(prev => ({ ...prev, files: updatedFiles }));
+        }
+    };
+
+    const handleOpenFile = async (file) => {
+        await openFile(file.uri, file.mimeType);
+    };
+
+    const handleDeleteFile = (file) => {
+        Alert.alert(
+            'Delete File',
+            `Delete "${file.originalName || file.name}"?`,
+            [
+                { text: 'Cancel', style: 'cancel' },
+                {
+                    text: 'Delete',
+                    style: 'destructive',
+                    onPress: async () => {
+                        await deleteFile(file.uri);
+                        const currentFiles = filesTargetItem.files || [];
+                        const updatedFiles = currentFiles.filter(f => f.id !== file.id);
+                        await updateItemFiles(subjectId, filesTargetItem.id, itemType, updatedFiles);
+                        setFilesTargetItem(prev => ({ ...prev, files: updatedFiles }));
+                    },
+                },
+            ]
+        );
+    };
+
+    // Get the current files for the target item from the live subject data
+    const currentFilesTargetData = filesTargetItem
+        ? (itemType === 'assignment' ? subject.assignments : subject.experiments).find(i => i.id === filesTargetItem.id)
+        : null;
+    const currentFiles = currentFilesTargetData?.files || filesTargetItem?.files || [];
 
     return (
         <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
@@ -337,12 +583,16 @@ export default function SubjectDetailScreen({ route, navigation }) {
                                 item={item}
                                 type={itemType}
                                 subjectId={subjectId}
+                                subjectCode={subject.code}
                                 outOf={outOf}
                                 colors={colors}
                                 isDark={isDark}
                                 primary={primary}
                                 updateItemStatus={updateItemStatus}
                                 updateItemMarks={updateItemMarks}
+                                updateItemSubmissionDate={updateItemSubmissionDate}
+                                updateItemFiles={updateItemFiles}
+                                onOpenFiles={handleOpenItemAction}
                             />
                         ))}
                     </View>
@@ -501,6 +751,170 @@ export default function SubjectDetailScreen({ route, navigation }) {
                     </View>
                 </KeyboardAvoidingView>
             </Modal>
+
+            {/* Date Picker Modal */}
+            <Modal
+                visible={dateModalVisible}
+                transparent
+                animationType="fade"
+                onRequestClose={() => setDateModalVisible(false)}
+            >
+                <KeyboardAvoidingView
+                    behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+                    style={styles.modalOverlay}
+                >
+                    <TouchableOpacity
+                        style={styles.modalBackdrop}
+                        activeOpacity={1}
+                        onPress={() => setDateModalVisible(false)}
+                    />
+                    <View style={[styles.modalContent, { backgroundColor: colors.card, width: '80%' }]}>
+                        <View style={styles.modalHeader}>
+                            <Text style={[styles.modalTitle, { color: colors.text }]}>Submission Date</Text>
+                            <TouchableOpacity onPress={() => setDateModalVisible(false)}>
+                                <MaterialCommunityIcons name="close" size={24} color={colors.textTertiary} />
+                            </TouchableOpacity>
+                        </View>
+
+                        {dateTargetItem && (
+                            <Text style={[styles.dateItemLabel, { color: colors.textSecondary }]}>
+                                {dateTargetItem.label}
+                            </Text>
+                        )}
+
+                        <View style={styles.dateInputRow}>
+                            <View style={styles.dateInputGroup}>
+                                <Text style={[styles.dateInputLabel, { color: colors.textTertiary }]}>Day</Text>
+                                <View style={[styles.dateInputWrap, { backgroundColor: colors.surfaceVariant, borderColor: colors.border }]}>
+                                    <TextInput
+                                        style={[styles.dateInput, { color: colors.text }]}
+                                        value={dateDay}
+                                        onChangeText={(t) => setDateDay(t.replace(/[^0-9]/g, '').slice(0, 2))}
+                                        keyboardType="numeric"
+                                        placeholder="DD"
+                                        placeholderTextColor={colors.textTertiary}
+                                        maxLength={2}
+                                    />
+                                </View>
+                            </View>
+                            <Text style={[styles.dateSep, { color: colors.textTertiary }]}>/</Text>
+                            <View style={styles.dateInputGroup}>
+                                <Text style={[styles.dateInputLabel, { color: colors.textTertiary }]}>Month</Text>
+                                <View style={[styles.dateInputWrap, { backgroundColor: colors.surfaceVariant, borderColor: colors.border }]}>
+                                    <TextInput
+                                        style={[styles.dateInput, { color: colors.text }]}
+                                        value={dateMonth}
+                                        onChangeText={(t) => setDateMonth(t.replace(/[^0-9]/g, '').slice(0, 2))}
+                                        keyboardType="numeric"
+                                        placeholder="MM"
+                                        placeholderTextColor={colors.textTertiary}
+                                        maxLength={2}
+                                    />
+                                </View>
+                            </View>
+                            <Text style={[styles.dateSep, { color: colors.textTertiary }]}>/</Text>
+                            <View style={[styles.dateInputGroup, { flex: 1.5 }]}>
+                                <Text style={[styles.dateInputLabel, { color: colors.textTertiary }]}>Year</Text>
+                                <View style={[styles.dateInputWrap, { backgroundColor: colors.surfaceVariant, borderColor: colors.border }]}>
+                                    <TextInput
+                                        style={[styles.dateInput, { color: colors.text }]}
+                                        value={dateYear}
+                                        onChangeText={(t) => setDateYear(t.replace(/[^0-9]/g, '').slice(0, 4))}
+                                        keyboardType="numeric"
+                                        placeholder="YYYY"
+                                        placeholderTextColor={colors.textTertiary}
+                                        maxLength={4}
+                                    />
+                                </View>
+                            </View>
+                        </View>
+
+                        <TouchableOpacity
+                            style={[styles.modalSaveBtn, { backgroundColor: primary }]}
+                            onPress={handleSaveDate}
+                            activeOpacity={0.8}
+                        >
+                            <MaterialCommunityIcons name="calendar-check" size={18} color="#FFF" />
+                            <Text style={styles.modalSaveBtnText}>Set Date</Text>
+                        </TouchableOpacity>
+
+                        {dateTargetItem?.submissionDate && (
+                            <TouchableOpacity
+                                style={[styles.modalDeleteBtn, { backgroundColor: colors.dangerLight, borderColor: colors.danger + '30' }]}
+                                onPress={handleClearDate}
+                                activeOpacity={0.7}
+                            >
+                                <MaterialCommunityIcons name="calendar-remove" size={18} color={colors.danger} />
+                                <Text style={[styles.modalDeleteBtnText, { color: colors.danger }]}>Remove Date</Text>
+                            </TouchableOpacity>
+                        )}
+                    </View>
+                </KeyboardAvoidingView>
+            </Modal>
+
+            {/* Files Modal */}
+            <Modal
+                visible={filesModalVisible}
+                transparent
+                animationType="fade"
+                onRequestClose={() => setFilesModalVisible(false)}
+            >
+                <View style={styles.modalOverlay}>
+                    <TouchableOpacity
+                        style={styles.modalBackdrop}
+                        activeOpacity={1}
+                        onPress={() => setFilesModalVisible(false)}
+                    />
+                    <View style={[styles.modalContent, { backgroundColor: colors.card, maxHeight: '80%' }]}>
+                        <View style={styles.modalHeader}>
+                            <View>
+                                <Text style={[styles.modalTitle, { color: colors.text }]}>Files</Text>
+                                {filesTargetItem && (
+                                    <Text style={[styles.filesSubtitle, { color: colors.textSecondary }]}>
+                                        {filesTargetItem.label}
+                                    </Text>
+                                )}
+                            </View>
+                            <TouchableOpacity onPress={() => setFilesModalVisible(false)}>
+                                <MaterialCommunityIcons name="close" size={24} color={colors.textTertiary} />
+                            </TouchableOpacity>
+                        </View>
+
+                        {currentFiles.length > 0 ? (
+                            <ScrollView style={styles.filesList} showsVerticalScrollIndicator={false}>
+                                {currentFiles.map((file) => (
+                                    <FileItem
+                                        key={file.id}
+                                        file={file}
+                                        colors={colors}
+                                        onOpen={handleOpenFile}
+                                        onDelete={handleDeleteFile}
+                                    />
+                                ))}
+                            </ScrollView>
+                        ) : (
+                            <View style={styles.noFilesWrap}>
+                                <MaterialCommunityIcons name="file-plus-outline" size={40} color={colors.textTertiary} />
+                                <Text style={[styles.noFilesText, { color: colors.textSecondary }]}>
+                                    No files attached yet
+                                </Text>
+                                <Text style={[styles.noFilesHint, { color: colors.textTertiary }]}>
+                                    Tap below to add files
+                                </Text>
+                            </View>
+                        )}
+
+                        <TouchableOpacity
+                            style={[styles.addFileBtn, { backgroundColor: primary }]}
+                            onPress={handlePickFiles}
+                            activeOpacity={0.8}
+                        >
+                            <MaterialCommunityIcons name="plus" size={20} color="#FFF" />
+                            <Text style={styles.addFileBtnText}>Add Files</Text>
+                        </TouchableOpacity>
+                    </View>
+                </View>
+            </Modal>
         </SafeAreaView>
     );
 }
@@ -560,17 +974,52 @@ const styles = StyleSheet.create({
         elevation: 3,
     },
     itemRow: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'space-between',
         paddingHorizontal: SPACING.md,
         paddingVertical: SPACING.sm + 2,
         borderBottomWidth: StyleSheet.hairlineWidth,
     },
+    itemTopRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+    },
     itemLeft: { flexDirection: 'row', alignItems: 'center', flex: 1 },
     itemDot: { width: 8, height: 8, borderRadius: 4, marginRight: SPACING.sm },
+    itemLabelWrap: { flex: 1 },
     itemLabel: { fontSize: FONT_SIZE.sm, fontWeight: '500' },
     itemRight: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+    itemBottomRow: {
+        flexDirection: 'row',
+        marginTop: 6,
+        marginLeft: SPACING.sm + 8,
+        gap: 8,
+    },
+    itemActionBtn: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        paddingHorizontal: 8,
+        paddingVertical: 4,
+        borderRadius: RADIUS.sm,
+        gap: 4,
+    },
+    itemActionText: {
+        fontSize: 10,
+        fontWeight: '600',
+    },
+    deadlineBadge: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        paddingHorizontal: 5,
+        paddingVertical: 1,
+        borderRadius: 4,
+        marginTop: 2,
+        alignSelf: 'flex-start',
+        gap: 3,
+    },
+    deadlineBadgeText: {
+        fontSize: 9,
+        fontWeight: '700',
+    },
     marksWrap: {
         flexDirection: 'row',
         alignItems: 'center',
@@ -700,6 +1149,113 @@ const styles = StyleSheet.create({
     modalDeleteBtnText: {
         fontSize: FONT_SIZE.md,
         fontWeight: '600',
+        marginLeft: SPACING.sm,
+    },
+
+    // Date Modal
+    dateItemLabel: {
+        fontSize: FONT_SIZE.sm,
+        fontWeight: '600',
+        marginBottom: SPACING.lg,
+    },
+    dateInputRow: {
+        flexDirection: 'row',
+        alignItems: 'flex-end',
+        marginBottom: SPACING.lg,
+        gap: 4,
+    },
+    dateInputGroup: {
+        flex: 1,
+    },
+    dateInputLabel: {
+        fontSize: 10,
+        fontWeight: '600',
+        marginBottom: 4,
+        textAlign: 'center',
+    },
+    dateInputWrap: {
+        borderRadius: RADIUS.md,
+        borderWidth: 1,
+        paddingHorizontal: SPACING.sm,
+    },
+    dateInput: {
+        fontSize: FONT_SIZE.lg,
+        fontWeight: '600',
+        textAlign: 'center',
+        paddingVertical: Platform.OS === 'ios' ? SPACING.md : SPACING.sm,
+    },
+    dateSep: {
+        fontSize: FONT_SIZE.xl,
+        fontWeight: '600',
+        marginBottom: Platform.OS === 'ios' ? SPACING.md : SPACING.sm + 2,
+    },
+
+    // Files Modal
+    filesSubtitle: {
+        fontSize: FONT_SIZE.xs,
+        marginTop: 2,
+    },
+    filesList: {
+        maxHeight: 300,
+    },
+    fileItem: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        paddingVertical: SPACING.sm + 2,
+        borderBottomWidth: StyleSheet.hairlineWidth,
+    },
+    fileItemContent: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        flex: 1,
+    },
+    fileIcon: {
+        width: 40,
+        height: 40,
+        borderRadius: RADIUS.sm,
+        alignItems: 'center',
+        justifyContent: 'center',
+        marginRight: SPACING.md,
+    },
+    fileInfo: {
+        flex: 1,
+    },
+    fileName: {
+        fontSize: FONT_SIZE.sm,
+        fontWeight: '500',
+    },
+    fileSize: {
+        fontSize: FONT_SIZE.xs,
+        marginTop: 2,
+    },
+    fileDeleteBtn: {
+        padding: SPACING.sm,
+    },
+    noFilesWrap: {
+        alignItems: 'center',
+        paddingVertical: SPACING.xl,
+    },
+    noFilesText: {
+        fontSize: FONT_SIZE.md,
+        fontWeight: '600',
+        marginTop: SPACING.md,
+    },
+    noFilesHint: {
+        fontSize: FONT_SIZE.xs,
+        marginTop: SPACING.xs,
+    },
+    addFileBtn: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        borderRadius: RADIUS.md,
+        paddingVertical: SPACING.md + 2,
+        marginTop: SPACING.md,
+    },
+    addFileBtnText: {
+        color: '#FFF',
+        fontSize: FONT_SIZE.md,
+        fontWeight: '700',
         marginLeft: SPACING.sm,
     },
 });

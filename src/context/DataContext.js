@@ -1,5 +1,7 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
-import { loadSubjects, saveSubjects } from '../services/storage';
+import { loadSubjects, saveSubjects, loadSettings, saveSettings, DEFAULT_SETTINGS } from '../services/storage';
+import { scheduleDeadlineNotifications, cancelItemNotifications, requestNotificationPermissions, rescheduleAllNotifications } from '../services/notifications';
+
 const generateId = () =>
     Date.now().toString(36) + Math.random().toString(36).substr(2, 9);
 
@@ -7,13 +9,19 @@ const DataContext = createContext();
 
 export const DataProvider = ({ children }) => {
     const [subjects, setSubjects] = useState([]);
+    const [settings, setSettingsState] = useState(DEFAULT_SETTINGS);
     const [isLoaded, setIsLoaded] = useState(false);
 
     useEffect(() => {
         (async () => {
             const data = await loadSubjects();
+            const settingsData = await loadSettings();
             setSubjects(data);
+            setSettingsState(settingsData);
             setIsLoaded(true);
+
+            // Request notification permissions on startup
+            await requestNotificationPermissions();
         })();
     }, []);
 
@@ -22,18 +30,33 @@ export const DataProvider = ({ children }) => {
         await saveSubjects(updated);
     }, []);
 
+    const updateSettings = useCallback(async (newSettings) => {
+        const merged = { ...settings, ...newSettings };
+        setSettingsState(merged);
+        await saveSettings(merged);
+
+        // If notification days changed, reschedule all notifications
+        if (newSettings.notificationDaysBefore !== undefined) {
+            await rescheduleAllNotifications(subjects);
+        }
+    }, [settings, subjects]);
+
     const addSubject = useCallback(async ({ name, code, totalAssignments, totalExperiments }) => {
         const assignments = Array.from({ length: totalAssignments }, (_, i) => ({
             id: generateId(),
             label: `Assignment ${i + 1}`,
             status: 'not_given',
             marks: null,
+            submissionDate: null,
+            files: [],
         }));
         const experiments = Array.from({ length: totalExperiments }, (_, i) => ({
             id: generateId(),
             label: `Experiment ${i + 1}`,
             status: 'not_given',
             marks: null,
+            submissionDate: null,
+            files: [],
         }));
 
         const now = Date.now();
@@ -57,6 +80,14 @@ export const DataProvider = ({ children }) => {
     }, [subjects, persist]);
 
     const deleteSubject = useCallback(async (subjectId) => {
+        // Cancel notifications for all items in the subject
+        const subject = subjects.find(s => s.id === subjectId);
+        if (subject) {
+            for (const item of [...subject.assignments, ...subject.experiments]) {
+                await cancelItemNotifications(item.id);
+            }
+        }
+
         const updated = subjects.filter((s) => s.id !== subjectId);
         await persist(updated);
     }, [subjects, persist]);
@@ -74,9 +105,14 @@ export const DataProvider = ({ children }) => {
                         label: `Assignment ${i + 1}`,
                         status: 'not_given',
                         marks: null,
+                        submissionDate: null,
+                        files: [],
                     });
                 }
             } else if (totalAssignments < newAssignments.length) {
+                // Cancel notifications for items being removed
+                const removed = newAssignments.slice(totalAssignments);
+                removed.forEach(item => cancelItemNotifications(item.id));
                 newAssignments = newAssignments.slice(0, totalAssignments);
             }
 
@@ -89,9 +125,13 @@ export const DataProvider = ({ children }) => {
                         label: `Experiment ${i + 1}`,
                         status: 'not_given',
                         marks: null,
+                        submissionDate: null,
+                        files: [],
                     });
                 }
             } else if (totalExperiments < newExperiments.length) {
+                const removed = newExperiments.slice(totalExperiments);
+                removed.forEach(item => cancelItemNotifications(item.id));
                 newExperiments = newExperiments.slice(0, totalExperiments);
             }
 
@@ -140,6 +180,57 @@ export const DataProvider = ({ children }) => {
         await persist(updated);
     }, [subjects, persist]);
 
+    const updateItemSubmissionDate = useCallback(async (subjectId, itemId, type, submissionDate) => {
+        const subject = subjects.find(s => s.id === subjectId);
+        if (!subject) return;
+
+        const key = type === 'assignment' ? 'assignments' : 'experiments';
+        const item = subject[key].find(i => i.id === itemId);
+        if (!item) return;
+
+        const updated = subjects.map((s) => {
+            if (s.id !== subjectId) return s;
+            return {
+                ...s,
+                [key]: s[key].map((it) =>
+                    it.id === itemId ? { ...it, submissionDate } : it
+                ),
+                updatedAt: Date.now(),
+            };
+        });
+        await persist(updated);
+
+        // Schedule or cancel notifications
+        if (submissionDate) {
+            await scheduleDeadlineNotifications(
+                subject.name,
+                subject.code,
+                item.label,
+                type,
+                submissionDate,
+                itemId,
+                settings.notificationDaysBefore || 2
+            );
+        } else {
+            await cancelItemNotifications(itemId);
+        }
+    }, [subjects, persist, settings]);
+
+    const updateItemFiles = useCallback(async (subjectId, itemId, type, files) => {
+        const updated = subjects.map((s) => {
+            if (s.id !== subjectId) return s;
+            const key = type === 'assignment' ? 'assignments' : 'experiments';
+            return {
+                ...s,
+                [key]: s[key].map((item) =>
+                    item.id === itemId ? { ...item, files: files || [] } : item
+                ),
+                updatedAt: Date.now(),
+            };
+        });
+        await persist(updated);
+    }, [subjects, persist]);
+
     const resetAllData = useCallback(async () => {
         await persist([]);
     }, [persist]);
@@ -162,6 +253,11 @@ export const DataProvider = ({ children }) => {
     const completedItems = completeCount + checkedCount;
     const completionPercentage = totalItems > 0 ? Math.round((completedItems / totalItems) * 100) : 0;
 
+    // Upcoming deadlines
+    const upcomingDeadlines = allItems
+        .filter(i => i.submissionDate && new Date(i.submissionDate) >= new Date())
+        .sort((a, b) => new Date(a.submissionDate) - new Date(b.submissionDate));
+
     if (!isLoaded) return null;
 
     return (
@@ -173,8 +269,12 @@ export const DataProvider = ({ children }) => {
                 updateSubject,
                 updateItemStatus,
                 updateItemMarks,
+                updateItemSubmissionDate,
+                updateItemFiles,
                 resetAllData,
                 isDuplicateCode,
+                settings,
+                updateSettings,
                 stats: {
                     totalSubjects: subjects.length,
                     totalAssignments,
@@ -188,6 +288,7 @@ export const DataProvider = ({ children }) => {
                     completeCount,
                     checkedCount,
                 },
+                upcomingDeadlines,
             }}
         >
             {children}

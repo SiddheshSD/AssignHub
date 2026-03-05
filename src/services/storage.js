@@ -2,6 +2,12 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const SUBJECTS_KEY = '@assignhub_subjects';
 const THEME_KEY = '@assignhub_theme';
+const SETTINGS_KEY = '@assignhub_settings';
+
+export const DEFAULT_SETTINGS = {
+    notificationDaysBefore: 2,
+    storageFolder: 'AssignHUB_Files',
+};
 
 export const loadSubjects = async () => {
     try {
@@ -39,9 +45,27 @@ export const saveThemePreference = async (preference) => {
     }
 };
 
+export const loadSettings = async () => {
+    try {
+        const data = await AsyncStorage.getItem(SETTINGS_KEY);
+        return data ? { ...DEFAULT_SETTINGS, ...JSON.parse(data) } : DEFAULT_SETTINGS;
+    } catch (error) {
+        console.error('Error loading settings:', error);
+        return DEFAULT_SETTINGS;
+    }
+};
+
+export const saveSettings = async (settings) => {
+    try {
+        await AsyncStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
+    } catch (error) {
+        console.error('Error saving settings:', error);
+    }
+};
+
 export const clearAllData = async () => {
     try {
-        await AsyncStorage.multiRemove([SUBJECTS_KEY, THEME_KEY]);
+        await AsyncStorage.multiRemove([SUBJECTS_KEY, THEME_KEY, SETTINGS_KEY]);
     } catch (error) {
         console.error('Error clearing data:', error);
     }

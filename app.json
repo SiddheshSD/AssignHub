@@ -2,7 +2,7 @@
   "expo": {
     "name": "AssignHUB",
     "slug": "AssignHUB",
-    "version": "1.1.0",
+    "version": "1.2.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
@@ -15,7 +15,7 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.assignhub.ios",
-      "buildNumber": "2",
+      "buildNumber": "3",
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false
       }
@@ -24,14 +24,29 @@
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#ffffff",
-        "versionCode": 2
+        "versionCode": 3
       },
       "edgeToEdgeEnabled": true,
-      "package": "com.siddhesh_2005.AssignHUB"
+      "package": "com.siddhesh_2005.AssignHUB",
+      "permissions": [
+        "NOTIFICATIONS",
+        "READ_EXTERNAL_STORAGE",
+        "WRITE_EXTERNAL_STORAGE"
+      ]
     },
     "web": {
       "favicon": "./assets/favicon.png"
     },
+    "plugins": [
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/icon.png",
+          "color": "#6C63FF",
+          "sounds": []
+        }
+      ]
+    ],
     "extra": {
       "eas": {
         "projectId": "a65737c5-464c-43f6-bda5-bb33e195dc8f"
