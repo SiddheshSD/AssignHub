@@ -6,8 +6,6 @@ import {
     TouchableOpacity,
     Alert,
     ScrollView,
-    TextInput,
-    Modal,
     Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -16,6 +14,7 @@ import { useTheme } from '../context/ThemeContext';
 import { useData } from '../context/DataContext';
 import { SPACING, RADIUS, FONT_SIZE } from '../constants/theme';
 import { rescheduleAllNotifications } from '../services/notifications';
+import { requestStorageDirectory, getFolderDisplayName } from '../services/fileManager';
 
 function SettingRow({ icon, label, description, colors, onPress, right, danger }) {
     return (
@@ -31,7 +30,7 @@ function SettingRow({ icon, label, description, colors, onPress, right, danger }
             <View style={styles.rowContent}>
                 <Text style={[styles.rowLabel, { color: danger ? colors.danger : colors.text }]}>{label}</Text>
                 {description && (
-                    <Text style={[styles.rowDesc, { color: colors.textTertiary }]}>{description}</Text>
+                    <Text style={[styles.rowDesc, { color: colors.textTertiary }]} numberOfLines={2}>{description}</Text>
                 )}
             </View>
             {right || (
@@ -116,8 +115,6 @@ function DaySelector({ value, onChange, colors, primary }) {
 export default function SettingsScreen() {
     const { colors, primary, isDark, preference, setThemePreference } = useTheme();
     const { resetAllData, stats, settings, updateSettings, subjects } = useData();
-    const [folderModalVisible, setFolderModalVisible] = useState(false);
-    const [folderName, setFolderName] = useState(settings.storageFolder || 'AssignHUB_Files');
 
     const handleReset = () => {
         Alert.alert(
@@ -139,22 +136,40 @@ export default function SettingsScreen() {
 
     const handleNotificationDaysChange = async (days) => {
         await updateSettings({ notificationDaysBefore: days });
-        // Reschedule all notifications with new days
         await rescheduleAllNotifications(subjects);
     };
 
-    const handleSaveFolder = async () => {
-        const trimmed = folderName.trim();
-        if (!trimmed) {
-            Alert.alert('Validation', 'Folder name cannot be empty.');
-            return;
+    const handleChooseFolder = async () => {
+        const dirUri = await requestStorageDirectory();
+        if (dirUri) {
+            await updateSettings({ storageDirUri: dirUri });
+            const displayName = getFolderDisplayName(dirUri);
+            Alert.alert(
+                'Folder Selected',
+                `Files will now be saved to:\n${displayName}\n\nAll new files will be saved to this folder on your phone.`
+            );
         }
-        // Sanitize folder name
-        const sanitized = trimmed.replace(/[^a-zA-Z0-9_\-\s]/g, '_');
-        await updateSettings({ storageFolder: sanitized });
-        setFolderModalVisible(false);
-        Alert.alert('Saved', `Files will be saved to: ${sanitized}\n\nNote: Existing files will remain in the old folder.`);
     };
+
+    const handleClearFolder = () => {
+        Alert.alert(
+            'Remove Folder',
+            'Remove the selected storage folder? Files will only be saved in app storage (not accessible from file manager).',
+            [
+                { text: 'Cancel', style: 'cancel' },
+                {
+                    text: 'Remove',
+                    style: 'destructive',
+                    onPress: async () => {
+                        await updateSettings({ storageDirUri: null });
+                    },
+                },
+            ]
+        );
+    };
+
+    const folderDisplayName = getFolderDisplayName(settings.storageDirUri);
+    const hasFolderSet = !!settings.storageDirUri;
 
     return (
         <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
@@ -211,23 +226,57 @@ export default function SettingsScreen() {
                     />
                 </View>
 
-                {/* Files Section */}
+                {/* File Storage Section */}
                 <View style={[styles.section, { backgroundColor: colors.card, shadowColor: colors.shadow }]}>
                     <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>FILE STORAGE</Text>
-                    <SettingRow
-                        icon="folder-outline"
-                        label="Storage Folder"
-                        description={settings.storageFolder || 'AssignHUB_Files'}
-                        colors={colors}
-                        onPress={() => {
-                            setFolderName(settings.storageFolder || 'AssignHUB_Files');
-                            setFolderModalVisible(true);
-                        }}
-                    />
+
+                    {/* Current folder display */}
+                    <View style={[styles.folderDisplay, { backgroundColor: colors.surfaceVariant, borderColor: colors.border }]}>
+                        <View style={[styles.folderIconWrap, { backgroundColor: hasFolderSet ? primary + '18' : colors.border + '60' }]}>
+                            <MaterialCommunityIcons
+                                name={hasFolderSet ? 'folder-check' : 'folder-alert-outline'}
+                                size={24}
+                                color={hasFolderSet ? primary : colors.textTertiary}
+                            />
+                        </View>
+                        <View style={styles.folderTextWrap}>
+                            <Text style={[styles.folderStatusLabel, { color: colors.textSecondary }]}>
+                                {hasFolderSet ? 'Saving files to' : 'No folder selected'}
+                            </Text>
+                            <Text style={[styles.folderPath, { color: hasFolderSet ? colors.text : colors.textTertiary }]} numberOfLines={2}>
+                                {hasFolderSet ? folderDisplayName : 'Files will only be saved in app storage'}
+                            </Text>
+                        </View>
+                    </View>
+
+                    {/* Choose folder button */}
+                    <TouchableOpacity
+                        style={[styles.chooseFolderBtn, { backgroundColor: primary }]}
+                        onPress={handleChooseFolder}
+                        activeOpacity={0.8}
+                    >
+                        <MaterialCommunityIcons name="folder-open-outline" size={20} color="#FFF" />
+                        <Text style={styles.chooseFolderBtnText}>
+                            {hasFolderSet ? 'Change Folder' : 'Choose Folder'}
+                        </Text>
+                    </TouchableOpacity>
+
+                    {/* Clear folder button */}
+                    {hasFolderSet && (
+                        <TouchableOpacity
+                            style={[styles.clearFolderBtn, { borderColor: colors.danger + '40' }]}
+                            onPress={handleClearFolder}
+                            activeOpacity={0.7}
+                        >
+                            <MaterialCommunityIcons name="folder-remove-outline" size={16} color={colors.danger} />
+                            <Text style={[styles.clearFolderBtnText, { color: colors.danger }]}>Remove Folder</Text>
+                        </TouchableOpacity>
+                    )}
+
                     <View style={styles.storageNote}>
                         <MaterialCommunityIcons name="information-outline" size={14} color={colors.textTertiary} />
                         <Text style={[styles.storageNoteText, { color: colors.textTertiary }]}>
-                            Files are saved in the app's internal storage and renamed based on subject code and assignment/experiment number
+                            Choose a folder on your phone (e.g. Downloads) where assignment files will be saved. Files are auto-renamed based on subject code and assignment/experiment number.
                         </Text>
                     </View>
                 </View>
@@ -257,7 +306,7 @@ export default function SettingsScreen() {
                     <SettingRow
                         icon="information-outline"
                         label="App Version"
-                        description="1.2.0"
+                        description="1.2.1"
                         colors={colors}
                     />
                     <SettingRow
@@ -274,56 +323,6 @@ export default function SettingsScreen() {
                     />
                 </View>
             </ScrollView>
-
-            {/* Folder Name Modal */}
-            <Modal
-                visible={folderModalVisible}
-                transparent
-                animationType="fade"
-                onRequestClose={() => setFolderModalVisible(false)}
-            >
-                <View style={styles.modalOverlay}>
-                    <TouchableOpacity
-                        style={styles.modalBackdrop}
-                        activeOpacity={1}
-                        onPress={() => setFolderModalVisible(false)}
-                    />
-                    <View style={[styles.modalContent, { backgroundColor: colors.card }]}>
-                        <View style={styles.modalHeader}>
-                            <Text style={[styles.modalTitle, { color: colors.text }]}>Storage Folder</Text>
-                            <TouchableOpacity onPress={() => setFolderModalVisible(false)}>
-                                <MaterialCommunityIcons name="close" size={24} color={colors.textTertiary} />
-                            </TouchableOpacity>
-                        </View>
-
-                        <Text style={[styles.folderDesc, { color: colors.textSecondary }]}>
-                            Set the folder name where assignment and experiment files will be saved
-                        </Text>
-
-                        <View style={[styles.folderInputWrap, { backgroundColor: colors.surfaceVariant, borderColor: colors.border }]}>
-                            <MaterialCommunityIcons name="folder-outline" size={20} color={colors.textTertiary} style={{ marginRight: SPACING.sm }} />
-                            <TextInput
-                                style={[styles.folderInput, { color: colors.text }]}
-                                value={folderName}
-                                onChangeText={setFolderName}
-                                placeholder="AssignHUB_Files"
-                                placeholderTextColor={colors.textTertiary}
-                                maxLength={50}
-                                autoCapitalize="none"
-                            />
-                        </View>
-
-                        <TouchableOpacity
-                            style={[styles.folderSaveBtn, { backgroundColor: primary }]}
-                            onPress={handleSaveFolder}
-                            activeOpacity={0.8}
-                        >
-                            <MaterialCommunityIcons name="content-save" size={18} color="#FFF" />
-                            <Text style={styles.folderSaveBtnText}>Save</Text>
-                        </TouchableOpacity>
-                    </View>
-                </View>
-            </Modal>
         </SafeAreaView>
     );
 }
@@ -405,11 +404,68 @@ const styles = StyleSheet.create({
         marginTop: 1,
     },
 
-    // Storage section
+    // File Storage section
+    folderDisplay: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        borderRadius: RADIUS.md,
+        borderWidth: 1,
+        padding: SPACING.md,
+        marginBottom: SPACING.md,
+    },
+    folderIconWrap: {
+        width: 44,
+        height: 44,
+        borderRadius: RADIUS.sm,
+        alignItems: 'center',
+        justifyContent: 'center',
+        marginRight: SPACING.md,
+    },
+    folderTextWrap: {
+        flex: 1,
+    },
+    folderStatusLabel: {
+        fontSize: FONT_SIZE.xs,
+        fontWeight: '600',
+        marginBottom: 2,
+    },
+    folderPath: {
+        fontSize: FONT_SIZE.sm,
+        fontWeight: '500',
+        lineHeight: 18,
+    },
+    chooseFolderBtn: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        borderRadius: RADIUS.md,
+        paddingVertical: SPACING.md + 2,
+        marginBottom: SPACING.sm,
+    },
+    chooseFolderBtnText: {
+        color: '#FFF',
+        fontSize: FONT_SIZE.md,
+        fontWeight: '700',
+        marginLeft: SPACING.sm,
+    },
+    clearFolderBtn: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        borderRadius: RADIUS.md,
+        paddingVertical: SPACING.sm + 2,
+        marginBottom: SPACING.sm,
+        borderWidth: 1,
+    },
+    clearFolderBtnText: {
+        fontSize: FONT_SIZE.sm,
+        fontWeight: '600',
+        marginLeft: SPACING.xs,
+    },
     storageNote: {
         flexDirection: 'row',
         alignItems: 'flex-start',
-        marginTop: SPACING.sm,
+        marginTop: SPACING.xs,
         paddingTop: SPACING.sm,
         gap: 6,
     },
@@ -436,63 +492,4 @@ const styles = StyleSheet.create({
     rowContent: { flex: 1 },
     rowLabel: { fontSize: FONT_SIZE.md, fontWeight: '600' },
     rowDesc: { fontSize: FONT_SIZE.xs, marginTop: 2 },
-
-    // Folder modal
-    modalOverlay: {
-        flex: 1,
-        justifyContent: 'center',
-        alignItems: 'center',
-    },
-    modalBackdrop: {
-        ...StyleSheet.absoluteFillObject,
-        backgroundColor: 'rgba(0,0,0,0.5)',
-    },
-    modalContent: {
-        width: '85%',
-        borderRadius: RADIUS.xl,
-        padding: SPACING.xl,
-        elevation: 10,
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 8 },
-        shadowOpacity: 0.25,
-        shadowRadius: 16,
-    },
-    modalHeader: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        marginBottom: SPACING.lg,
-    },
-    modalTitle: { fontSize: FONT_SIZE.xl, fontWeight: '700' },
-    folderDesc: {
-        fontSize: FONT_SIZE.sm,
-        marginBottom: SPACING.lg,
-        lineHeight: 20,
-    },
-    folderInputWrap: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        borderRadius: RADIUS.md,
-        borderWidth: 1,
-        paddingHorizontal: SPACING.md,
-        marginBottom: SPACING.lg,
-    },
-    folderInput: {
-        flex: 1,
-        fontSize: FONT_SIZE.md,
-        paddingVertical: Platform.OS === 'ios' ? SPACING.md : SPACING.sm + 2,
-    },
-    folderSaveBtn: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'center',
-        borderRadius: RADIUS.md,
-        paddingVertical: SPACING.md + 2,
-    },
-    folderSaveBtnText: {
-        color: '#FFF',
-        fontSize: FONT_SIZE.md,
-        fontWeight: '700',
-        marginLeft: SPACING.sm,
-    },
 });

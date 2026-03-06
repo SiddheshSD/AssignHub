@@ -7,6 +7,7 @@ const SETTINGS_KEY = '@assignhub_settings';
 export const DEFAULT_SETTINGS = {
     notificationDaysBefore: 2,
     storageFolder: 'AssignHUB_Files',
+    storageDirUri: null,
 };
 
 export const loadSubjects = async () => {
