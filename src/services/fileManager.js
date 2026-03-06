@@ -10,9 +10,18 @@ const { StorageAccessFramework } = FileSystem;
 /**
  * Request the user to pick a folder on their phone using SAF.
  * Returns the granted directory URI, or null if cancelled.
+ * Note: SAF is NOT available in Expo Go — only in development/production builds.
  */
 export async function requestStorageDirectory() {
     try {
+        // SAF is not available in Expo Go
+        if (!StorageAccessFramework || !StorageAccessFramework.requestDirectoryPermissionsAsync) {
+            Alert.alert(
+                'Not Available in Expo Go',
+                'Folder selection requires a development or production build. Files will be saved in app storage for now.\n\nBuild the app with "eas build" to enable this feature.'
+            );
+            return null;
+        }
         const permissions = await StorageAccessFramework.requestDirectoryPermissionsAsync();
         if (permissions.granted) {
             return permissions.directoryUri;
@@ -172,8 +181,9 @@ export async function saveFiles(pickedFiles, subjectCode, itemLabel, existingFil
 
             let externalUri = null;
 
-            // Save to SAF directory if user has chosen one
-            if (savedDirUri) {
+
+            // Save to SAF directory if user has chosen one (SAF not available in Expo Go)
+            if (savedDirUri && StorageAccessFramework && StorageAccessFramework.createFileAsync) {
                 try {
                     // Create file in the user's chosen directory
                     const safFileUri = await StorageAccessFramework.createFileAsync(

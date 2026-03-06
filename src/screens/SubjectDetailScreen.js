@@ -26,6 +26,10 @@ import {
     STATUS_ORDER,
 } from '../constants/theme';
 import { pickDocuments, saveFiles, deleteFile, openFile, formatFileSize, getFileIcon, getFileColor } from '../services/fileManager';
+import { useAuth } from '../context/AuthContext';
+import { uploadFile as driveUpload } from '../services/driveService';
+import { createMetadata, addToSyncQueue } from '../services/metadataRepository';
+import { isOnline } from '../services/networkMonitor';
 
 function StatusBadge({ status, isDark, onPress }) {
     const themeKey = isDark ? 'dark' : 'light';
@@ -265,6 +269,7 @@ export default function SubjectDetailScreen({ route, navigation }) {
     const { subjectId } = route.params;
     const { colors, isDark, primary } = useTheme();
     const { subjects, updateItemStatus, updateItemMarks, updateItemSubmissionDate, updateItemFiles, deleteSubject, updateSubject } = useData();
+    const { isLoggedIn, accessToken, driveFolderId, user } = useAuth();
     const [activeTab, setActiveTab] = useState('assignments');
     const [editModalVisible, setEditModalVisible] = useState(false);
 
@@ -429,6 +434,78 @@ export default function SubjectDetailScreen({ route, navigation }) {
             await updateItemFiles(subjectId, filesTargetItem.id, itemType, updatedFiles);
             // Update the local target item reference
             setFilesTargetItem(prev => ({ ...prev, files: updatedFiles }));
+
+            // Cloud upload (async, non-blocking)
+            if (isLoggedIn && accessToken && driveFolderId) {
+                uploadToCloudAsync(saved);
+            }
+        }
+    };
+
+    /**
+     * Upload files to Google Drive and save metadata.
+     * Runs asynchronously so it doesn't block the UI.
+     */
+    const uploadToCloudAsync = async (savedFiles) => {
+        for (const file of savedFiles) {
+            try {
+                if (isOnline()) {
+                    // Upload to Google Drive
+                    const driveResult = await driveUpload(
+                        accessToken,
+                        file.uri,
+                        file.name,
+                        file.mimeType,
+                        driveFolderId
+                    );
+
+                    // Save metadata locally
+                    await createMetadata({
+                        localId: file.id,
+                        userId: user?.id,
+                        title: file.name,
+                        subject: subject.name,
+                        subjectCode: subject.code,
+                        type: itemType,
+                        description: filesTargetItem.label,
+                        fileId: driveResult?.fileId || null,
+                        fileName: file.name,
+                        fileType: file.mimeType,
+                        syncStatus: driveResult ? 'pending' : 'error',
+                    });
+                } else {
+                    // Offline: queue the upload for later
+                    await createMetadata({
+                        localId: file.id,
+                        userId: user?.id,
+                        title: file.name,
+                        subject: subject.name,
+                        subjectCode: subject.code,
+                        type: itemType,
+                        description: filesTargetItem.label,
+                        fileId: null,
+                        fileName: file.name,
+                        fileType: file.mimeType,
+                        syncStatus: 'pending',
+                    });
+
+                    await addToSyncQueue({
+                        type: 'upload',
+                        localId: file.id,
+                        localUri: file.uri,
+                        fileName: file.name,
+                        mimeType: file.mimeType,
+                        data: {
+                            subjectCode: subject.code,
+                            itemLabel: filesTargetItem.label,
+                            itemType,
+                        },
+                    });
+                }
+            } catch (error) {
+                console.error('SubjectDetailScreen: Cloud upload error:', error);
+                // Silent fail — local file is already saved
+            }
         }
     };
 

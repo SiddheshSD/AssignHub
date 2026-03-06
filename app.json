@@ -6,6 +6,7 @@
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
+    "scheme": "assignhub",
     "newArchEnabled": true,
     "splash": {
       "image": "./assets/splash-icon.png",
@@ -45,7 +46,9 @@
           "color": "#6C63FF",
           "sounds": []
         }
-      ]
+      ],
+      "expo-web-browser",
+      "expo-secure-store"
     ],
     "extra": {
       "eas": {

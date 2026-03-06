@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useAuth } from '../context/AuthContext';
 import {
     View,
     Text,
@@ -115,6 +116,7 @@ function DaySelector({ value, onChange, colors, primary }) {
 export default function SettingsScreen() {
     const { colors, primary, isDark, preference, setThemePreference } = useTheme();
     const { resetAllData, stats, settings, updateSettings, subjects } = useData();
+    const { user, isLoggedIn, login, logout, syncStatus, triggerSync, cloudConfigured } = useAuth();
 
     const handleReset = () => {
         Alert.alert(
@@ -175,6 +177,75 @@ export default function SettingsScreen() {
         <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
             <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scroll}>
                 <Text style={[styles.title, { color: colors.text }]}>Settings</Text>
+
+                {/* Cloud Account Section */}
+                <View style={[styles.section, { backgroundColor: colors.card, shadowColor: colors.shadow }]}>
+                    <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>CLOUD ACCOUNT</Text>
+                    {isLoggedIn ? (
+                        <>
+                            {/* Logged in — show profile */}
+                            <View style={styles.profileCard}>
+                                <View style={[styles.profileAvatar, { backgroundColor: primary + '18' }]}>
+                                    <Text style={[styles.profileAvatarText, { color: primary }]}>
+                                        {user.name ? user.name.charAt(0).toUpperCase() : '?'}
+                                    </Text>
+                                </View>
+                                <View style={styles.profileInfo}>
+                                    <Text style={[styles.profileName, { color: colors.text }]}>{user.name}</Text>
+                                    <Text style={[styles.profileEmail, { color: colors.textTertiary }]}>{user.email}</Text>
+                                </View>
+                                <View style={[styles.syncDot, { backgroundColor: syncStatus.pendingCount > 0 ? '#FF9800' : '#4CAF50' }]} />
+                            </View>
+                            <SettingRow
+                                icon="cloud-sync"
+                                label="Sync Now"
+                                description={syncStatus.syncing ? 'Syncing...' : syncStatus.pendingCount > 0 ? `${syncStatus.pendingCount} pending` : 'Everything synced'}
+                                colors={colors}
+                                onPress={triggerSync}
+                            />
+                            <SettingRow
+                                icon="google-drive"
+                                label="Google Drive"
+                                description="Files sync to AssignHub folder"
+                                colors={colors}
+                            />
+                            <SettingRow
+                                icon="logout"
+                                label="Sign Out"
+                                description="Stop cloud sync"
+                                colors={colors}
+                                onPress={logout}
+                                danger
+                            />
+                        </>
+                    ) : (
+                        <>
+                            {/* Not logged in — show login button */}
+                            <View style={styles.cloudPromo}>
+                                <MaterialCommunityIcons name="cloud-outline" size={32} color={colors.textTertiary} />
+                                <Text style={[styles.cloudPromoText, { color: colors.textSecondary }]}>
+                                    Sign in to sync your files to Google Drive and back up metadata to the cloud
+                                </Text>
+                            </View>
+                            <TouchableOpacity
+                                style={[styles.googleLoginBtn, { backgroundColor: '#4285F4' }]}
+                                onPress={login}
+                                activeOpacity={0.8}
+                            >
+                                <MaterialCommunityIcons name="google" size={20} color="#FFF" />
+                                <Text style={styles.googleLoginBtnText}>Sign in with Google</Text>
+                            </TouchableOpacity>
+                            {!cloudConfigured && (
+                                <View style={styles.storageNote}>
+                                    <MaterialCommunityIcons name="alert-outline" size={14} color={'#FF9800'} />
+                                    <Text style={[styles.storageNoteText, { color: '#FF9800' }]}>
+                                        Cloud credentials not configured. Update src/config/cloudConfig.js
+                                    </Text>
+                                </View>
+                            )}
+                        </>
+                    )}
+                </View>
 
                 {/* Theme Section */}
                 <View style={[styles.section, { backgroundColor: colors.card, shadowColor: colors.shadow }]}>
@@ -492,4 +563,65 @@ const styles = StyleSheet.create({
     rowContent: { flex: 1 },
     rowLabel: { fontSize: FONT_SIZE.md, fontWeight: '600' },
     rowDesc: { fontSize: FONT_SIZE.xs, marginTop: 2 },
+
+    // Cloud account styles
+    profileCard: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        marginBottom: SPACING.md,
+        paddingBottom: SPACING.md,
+    },
+    profileAvatar: {
+        width: 44,
+        height: 44,
+        borderRadius: 22,
+        alignItems: 'center',
+        justifyContent: 'center',
+        marginRight: SPACING.md,
+    },
+    profileAvatarText: {
+        fontSize: FONT_SIZE.lg,
+        fontWeight: '700',
+    },
+    profileInfo: {
+        flex: 1,
+    },
+    profileName: {
+        fontSize: FONT_SIZE.md,
+        fontWeight: '700',
+    },
+    profileEmail: {
+        fontSize: FONT_SIZE.xs,
+        marginTop: 1,
+    },
+    syncDot: {
+        width: 10,
+        height: 10,
+        borderRadius: 5,
+    },
+    cloudPromo: {
+        alignItems: 'center',
+        paddingVertical: SPACING.md,
+    },
+    cloudPromoText: {
+        fontSize: FONT_SIZE.sm,
+        textAlign: 'center',
+        marginTop: SPACING.sm,
+        lineHeight: 20,
+        paddingHorizontal: SPACING.md,
+    },
+    googleLoginBtn: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        borderRadius: RADIUS.md,
+        paddingVertical: SPACING.md + 2,
+        marginTop: SPACING.md,
+    },
+    googleLoginBtnText: {
+        color: '#FFF',
+        fontSize: FONT_SIZE.md,
+        fontWeight: '700',
+        marginLeft: SPACING.sm,
+    },
 });
