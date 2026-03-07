@@ -2,26 +2,59 @@ import * as FileSystem from 'expo-file-system';
 import * as DocumentPicker from 'expo-document-picker';
 import * as IntentLauncher from 'expo-intent-launcher';
 import * as Sharing from 'expo-sharing';
-import { Platform, Alert } from 'react-native';
+import { Platform, Alert, PermissionsAndroid } from 'react-native';
 import { loadSettings, saveSettings } from './storage';
 
-const { StorageAccessFramework } = FileSystem;
+// Safely check if SAF is available (it's undefined in Expo Go)
+const SAF = FileSystem.StorageAccessFramework;
+const isSAFAvailable = !!(SAF && typeof SAF.requestDirectoryPermissionsAsync === 'function');
+
+// Base directory for internal file storage (always available)
+const INTERNAL_BASE_DIR = FileSystem.documentDirectory + 'AssignHUB_Files/';
+
+/**
+ * Initialize the internal storage directory.
+ * Called on first use to ensure the directory exists.
+ */
+async function ensureInternalDir(subDir = '') {
+    const dir = INTERNAL_BASE_DIR + (subDir ? subDir + '/' : '');
+    const info = await FileSystem.getInfoAsync(dir);
+    if (!info.exists) {
+        await FileSystem.makeDirectoryAsync(dir, { intermediates: true });
+    }
+    return dir;
+}
 
 /**
  * Request the user to pick a folder on their phone using SAF.
- * Returns the granted directory URI, or null if cancelled.
+ * Returns the granted directory URI, or null if cancelled or unavailable.
  */
 export async function requestStorageDirectory() {
+    if (!isSAFAvailable) {
+        // SAF not available (Expo Go) — use internal directory instead
+        Alert.alert(
+            'Storage Location',
+            'Files will be saved to app storage. You can use the "Share" button to export files to any location on your phone.\n\nFor full folder picker support, use a development build.',
+            [{ text: 'OK' }]
+        );
+        return '__internal__';
+    }
+
     try {
-        const permissions = await StorageAccessFramework.requestDirectoryPermissionsAsync();
+        const permissions = await SAF.requestDirectoryPermissionsAsync();
         if (permissions.granted) {
             return permissions.directoryUri;
         }
         return null;
     } catch (error) {
         console.error('Error requesting directory permissions:', error);
-        Alert.alert('Error', 'Failed to get folder access. Please try again.');
-        return null;
+        // Fallback to internal storage
+        Alert.alert(
+            'Folder Picker Unavailable',
+            'Could not open folder picker. Files will be saved to app storage instead. You can share/export files using the share button.',
+            [{ text: 'OK' }]
+        );
+        return '__internal__';
     }
 }
 
@@ -90,10 +123,11 @@ function generateFileName(subjectCode, itemLabel, originalName, index) {
 }
 
 /**
- * Get a user-friendly folder name from a SAF URI.
+ * Get a user-friendly folder name from a SAF URI or internal path.
  */
 export function getFolderDisplayName(uri) {
     if (!uri) return 'Not set';
+    if (uri === '__internal__') return 'App Storage (Internal)';
     try {
         // SAF URIs look like: content://com.android.externalstorage.documents/tree/primary%3ADownloads%2FAssignHUB
         const decoded = decodeURIComponent(uri);
@@ -135,8 +169,8 @@ export async function pickDocuments() {
 }
 
 /**
- * Save picked files to the user's chosen directory using SAF.
- * Also keeps an internal copy so we can always open them.
+ * Save picked files to storage.
+ * Uses SAF if available and chosen, otherwise uses internal app storage.
  * Returns an array of saved file info objects.
  */
 export async function saveFiles(pickedFiles, subjectCode, itemLabel, existingFiles = []) {
@@ -145,12 +179,9 @@ export async function saveFiles(pickedFiles, subjectCode, itemLabel, existingFil
     const savedFiles = [];
     const startIndex = existingFiles.length;
 
-    // Also save internally for reliable access
-    const internalDir = FileSystem.documentDirectory + 'AssignHUB_Internal/' + sanitizeName(subjectCode) + '/';
-    const internalDirInfo = await FileSystem.getInfoAsync(internalDir);
-    if (!internalDirInfo.exists) {
-        await FileSystem.makeDirectoryAsync(internalDir, { intermediates: true });
-    }
+    // Ensure the internal subject directory exists
+    const subjectSubDir = sanitizeName(subjectCode);
+    const internalDir = await ensureInternalDir(subjectSubDir);
 
     for (let i = 0; i < pickedFiles.length; i++) {
         const file = pickedFiles[i];
@@ -172,11 +203,11 @@ export async function saveFiles(pickedFiles, subjectCode, itemLabel, existingFil
 
             let externalUri = null;
 
-            // Save to SAF directory if user has chosen one
-            if (savedDirUri) {
+            // Try to save to SAF directory if user has chosen one and SAF is available
+            if (savedDirUri && savedDirUri !== '__internal__' && isSAFAvailable) {
                 try {
                     // Create file in the user's chosen directory
-                    const safFileUri = await StorageAccessFramework.createFileAsync(
+                    const safFileUri = await SAF.createFileAsync(
                         savedDirUri,
                         newName,
                         fileMime
@@ -215,10 +246,15 @@ export async function saveFiles(pickedFiles, subjectCode, itemLabel, existingFil
     }
 
     if (savedFiles.length > 0) {
-        const location = savedDirUri ? 'phone folder and app storage' : 'app storage only';
+        let location;
+        if (savedDirUri && savedDirUri !== '__internal__' && isSAFAvailable) {
+            location = 'phone folder and app storage';
+        } else {
+            location = 'app storage';
+        }
         Alert.alert(
             'Files Saved',
-            `${savedFiles.length} file(s) saved to ${location}.${!savedDirUri ? '\n\nTip: Set a storage folder in Settings to also save files to your phone.' : ''}`
+            `${savedFiles.length} file(s) saved to ${location}.${!savedDirUri || savedDirUri === '__internal__' ? '\n\nTip: Use the share button on any file to save it to your phone\'s Downloads or any other folder.' : ''}`
         );
     }
 
@@ -241,6 +277,37 @@ export async function deleteFile(fileUri) {
 }
 
 /**
+ * Share/export a file so users can save it to any location on their phone.
+ */
+export async function shareFile(fileUri, mimeType) {
+    try {
+        if (!fileUri) {
+            Alert.alert('Error', 'No file path available.');
+            return;
+        }
+
+        const info = await FileSystem.getInfoAsync(fileUri);
+        if (!info.exists) {
+            Alert.alert('File Not Found', 'The file could not be found.');
+            return;
+        }
+
+        const canShare = await Sharing.isAvailableAsync();
+        if (canShare) {
+            await Sharing.shareAsync(fileUri, {
+                mimeType: mimeType || 'application/octet-stream',
+                dialogTitle: 'Save or Share File',
+            });
+        } else {
+            Alert.alert('Error', 'Sharing is not available on this device.');
+        }
+    } catch (error) {
+        console.error('Error sharing file:', error);
+        Alert.alert('Error', 'Failed to share the file.');
+    }
+}
+
+/**
  * Open a file using the system's default viewer.
  */
 export async function openFile(fileUri, mimeType) {
@@ -258,32 +325,27 @@ export async function openFile(fileUri, mimeType) {
         }
 
         if (Platform.OS === 'android') {
-            const contentUri = await FileSystem.getContentUriAsync(fileUri);
-            await IntentLauncher.startActivityAsync('android.intent.action.VIEW', {
-                data: contentUri,
-                flags: 1, // FLAG_GRANT_READ_URI_PERMISSION
-                type: mimeType || '*/*',
-            });
-        } else {
-            const canShare = await Sharing.isAvailableAsync();
-            if (canShare) {
-                await Sharing.shareAsync(fileUri, {
-                    mimeType: mimeType || 'application/octet-stream',
+            try {
+                const contentUri = await FileSystem.getContentUriAsync(fileUri);
+                await IntentLauncher.startActivityAsync('android.intent.action.VIEW', {
+                    data: contentUri,
+                    flags: 1, // FLAG_GRANT_READ_URI_PERMISSION
+                    type: mimeType || '*/*',
                 });
-            } else {
-                Alert.alert('Error', 'Cannot open file on this device.');
+            } catch (intentError) {
+                console.warn('Intent launcher failed, falling back to share:', intentError);
+                // Fallback to sharing if intent launcher fails
+                await shareFile(fileUri, mimeType);
             }
+        } else {
+            // iOS: use sharing
+            await shareFile(fileUri, mimeType);
         }
     } catch (error) {
         console.error('Error opening file:', error);
         // Fallback: try sharing
         try {
-            const canShare = await Sharing.isAvailableAsync();
-            if (canShare) {
-                await Sharing.shareAsync(fileUri);
-            } else {
-                Alert.alert('Error', 'Unable to open this file. No app found to handle this file type.');
-            }
+            await shareFile(fileUri, mimeType);
         } catch (shareError) {
             Alert.alert('Error', 'Unable to open this file.');
         }
@@ -339,7 +401,7 @@ export function getFileColor(mimeType) {
  */
 export async function deleteSubjectFiles(subjectCode) {
     try {
-        const subjectDir = FileSystem.documentDirectory + 'AssignHUB_Internal/' + sanitizeName(subjectCode) + '/';
+        const subjectDir = INTERNAL_BASE_DIR + sanitizeName(subjectCode) + '/';
         const info = await FileSystem.getInfoAsync(subjectDir);
         if (info.exists) {
             await FileSystem.deleteAsync(subjectDir, { idempotent: true });
@@ -347,4 +409,12 @@ export async function deleteSubjectFiles(subjectCode) {
     } catch (error) {
         console.error('Error deleting subject files:', error);
     }
+}
+
+/**
+ * Check if SAF (Storage Access Framework) is available.
+ * Used by UI to decide what options to show.
+ */
+export function isStorageAccessFrameworkAvailable() {
+    return isSAFAvailable;
 }

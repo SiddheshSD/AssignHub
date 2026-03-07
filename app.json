@@ -2,7 +2,7 @@
   "expo": {
     "name": "AssignHUB",
     "slug": "AssignHUB",
-    "version": "1.2.1",
+    "version": "1.2.2",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
@@ -15,7 +15,7 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.assignhub.ios",
-      "buildNumber": "3",
+      "buildNumber": "4",
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false
       }
@@ -24,7 +24,7 @@
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#ffffff",
-        "versionCode": 3
+        "versionCode": 4
       },
       "edgeToEdgeEnabled": true,
       "package": "com.siddhesh_2005.AssignHUB",

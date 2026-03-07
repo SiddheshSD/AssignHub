@@ -25,7 +25,7 @@ import {
     STATUS_ICONS,
     STATUS_ORDER,
 } from '../constants/theme';
-import { pickDocuments, saveFiles, deleteFile, openFile, formatFileSize, getFileIcon, getFileColor } from '../services/fileManager';
+import { pickDocuments, saveFiles, deleteFile, openFile, shareFile, formatFileSize, getFileIcon, getFileColor } from '../services/fileManager';
 
 function StatusBadge({ status, isDark, onPress }) {
     const themeKey = isDark ? 'dark' : 'light';
@@ -227,7 +227,7 @@ function Stepper({ label, value, onChange, min = 0, max = 20, colors, primary })
     );
 }
 
-function FileItem({ file, colors, onOpen, onDelete }) {
+function FileItem({ file, colors, onOpen, onShare, onDelete }) {
     const iconName = getFileIcon(file.mimeType);
     const iconColor = getFileColor(file.mimeType);
 
@@ -249,6 +249,13 @@ function FileItem({ file, colors, onOpen, onDelete }) {
                         {formatFileSize(file.size)}
                     </Text>
                 </View>
+            </TouchableOpacity>
+            <TouchableOpacity
+                style={styles.fileShareBtn}
+                onPress={() => onShare(file)}
+                activeOpacity={0.7}
+            >
+                <MaterialCommunityIcons name="share-variant-outline" size={18} color={colors.textSecondary} />
             </TouchableOpacity>
             <TouchableOpacity
                 style={styles.fileDeleteBtn}
@@ -434,6 +441,10 @@ export default function SubjectDetailScreen({ route, navigation }) {
 
     const handleOpenFile = async (file) => {
         await openFile(file.uri, file.mimeType);
+    };
+
+    const handleShareFile = async (file) => {
+        await shareFile(file.uri, file.mimeType);
     };
 
     const handleDeleteFile = (file) => {
@@ -888,6 +899,7 @@ export default function SubjectDetailScreen({ route, navigation }) {
                                         file={file}
                                         colors={colors}
                                         onOpen={handleOpenFile}
+                                        onShare={handleShareFile}
                                         onDelete={handleDeleteFile}
                                     />
                                 ))}
@@ -1227,6 +1239,10 @@ const styles = StyleSheet.create({
     fileSize: {
         fontSize: FONT_SIZE.xs,
         marginTop: 2,
+    },
+    fileShareBtn: {
+        padding: SPACING.sm,
+        marginRight: 2,
     },
     fileDeleteBtn: {
         padding: SPACING.sm,
