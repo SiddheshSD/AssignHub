@@ -14,7 +14,7 @@ import { useTheme } from '../context/ThemeContext';
 import { useData } from '../context/DataContext';
 import { SPACING, RADIUS, FONT_SIZE } from '../constants/theme';
 import { rescheduleAllNotifications } from '../services/notifications';
-import { requestStorageDirectory, getFolderDisplayName, isStorageAccessFrameworkAvailable } from '../services/fileManager';
+import { requestStorageDirectory, getFolderDisplayName } from '../services/fileManager';
 
 function SettingRow({ icon, label, description, colors, onPress, right, danger }) {
     return (
@@ -144,15 +144,10 @@ export default function SettingsScreen() {
         if (dirUri) {
             await updateSettings({ storageDirUri: dirUri });
             const displayName = getFolderDisplayName(dirUri);
-            if (dirUri === '__internal__') {
-                // SAF not available — internal storage is being used
-                // No extra alert needed, requestStorageDirectory already showed one
-            } else {
-                Alert.alert(
-                    'Folder Selected',
-                    `Files will now be saved to:\n${displayName}\n\nAll new files will be saved to this folder on your phone.`
-                );
-            }
+            Alert.alert(
+                'Folder Selected',
+                `Files will now be saved to:\n${displayName}\n\nAll new files will be saved to this folder on your phone.`
+            );
         }
     };
 
@@ -281,9 +276,7 @@ export default function SettingsScreen() {
                     <View style={styles.storageNote}>
                         <MaterialCommunityIcons name="information-outline" size={14} color={colors.textTertiary} />
                         <Text style={[styles.storageNoteText, { color: colors.textTertiary }]}>
-                            {isStorageAccessFrameworkAvailable()
-                                ? 'Choose a folder on your phone (e.g. Downloads) where assignment files will be saved. Files are auto-renamed based on subject code and assignment/experiment number.'
-                                : 'Files are saved to app storage. Use the share/export button on any file to save it to Downloads or any other location on your phone. For full folder picker support, use a development build instead of Expo Go.'}
+                            Choose a folder on your phone (e.g. Downloads) where assignment files will be saved. Files are auto-renamed based on subject code and assignment/experiment number.
                         </Text>
                     </View>
                 </View>
@@ -313,7 +306,7 @@ export default function SettingsScreen() {
                     <SettingRow
                         icon="information-outline"
                         label="App Version"
-                        description="1.2.2"
+                        description="1.2.3"
                         colors={colors}
                     />
                     <SettingRow

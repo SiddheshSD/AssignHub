@@ -457,7 +457,7 @@ export default function SubjectDetailScreen({ route, navigation }) {
                     text: 'Delete',
                     style: 'destructive',
                     onPress: async () => {
-                        await deleteFile(file.uri);
+                        await deleteFile(file.uri, file.externalUri);
                         const currentFiles = filesTargetItem.files || [];
                         const updatedFiles = currentFiles.filter(f => f.id !== file.id);
                         await updateItemFiles(subjectId, filesTargetItem.id, itemType, updatedFiles);
