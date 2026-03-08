@@ -95,12 +95,12 @@ AssignHUB/
 
 Download the specific version installed builds below (APK/AAB configurations generated via EAS). I've left the placeholder `URL_HERE` strings for you to paste your specific Expo download links!
 
-- [Version 1.2.4 (Latest) - Bug fixes & File Storage Limit upgrades](URL_HERE)
-- [Version 1.2.2](URL_HERE)
-- [Version 1.2.1](URL_HERE)
-- [Version 1.2.0](URL_HERE)
-- [Version 1.1.0](URL_HERE)
-- [Version 1.0.0](URL_HERE)
+- [Version 1.2.4 (Latest)](https://expo.dev/accounts/siddhesh_2005/projects/AssignHUB/builds/44041141-a05d-4af7-a075-63ff000e5abe)
+- [Version 1.2.2](https://expo.dev/accounts/siddhesh_2005/projects/AssignHUB/builds/3ea6c312-e769-4c5b-bcfe-66a9915c2305)
+- [Version 1.2.1](https://expo.dev/accounts/siddhesh_2005/projects/AssignHUB/builds/d65b0d43-931c-4506-9fc0-8be0ad62316b)
+- [Version 1.2.0](https://expo.dev/accounts/siddhesh_2005/projects/AssignHUB/builds/8ee5a044-1cb6-4fc8-9e39-fe601b7e0e17)
+- [Version 1.1.0](https://expo.dev/accounts/siddhesh_2005/projects/AssignHUB/builds/b6818a21-ac26-48e6-a4fa-de32e1d27f21)
+- [Version 1.0.0](https://expo.dev/accounts/siddhesh_2005/projects/AssignHUB/builds/69aa9150-e547-437d-a908-87ba89ac994a)
 
 ---
 Built with ❤️ for students executing with total focus.
