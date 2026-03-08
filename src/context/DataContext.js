@@ -235,6 +235,43 @@ export const DataProvider = ({ children }) => {
         await persist([]);
     }, [persist]);
 
+    const importSubjects = useCallback(async (importedSubjects) => {
+        const rebuilt = importedSubjects.map((s) => {
+            const assignments = (s.assignments || []).map((a, i) => ({
+                id: generateId(),
+                label: a.label || `Assignment ${i + 1}`,
+                status: a.status || 'not_given',
+                marks: a.marks ?? null,
+                submissionDate: a.submissionDate || null,
+                files: [],
+            }));
+            const experiments = (s.experiments || []).map((e, i) => ({
+                id: generateId(),
+                label: e.label || `Experiment ${i + 1}`,
+                status: e.status || 'not_given',
+                marks: e.marks ?? null,
+                submissionDate: e.submissionDate || null,
+                files: [],
+            }));
+
+            return {
+                id: generateId(),
+                name: s.name,
+                code: s.code,
+                totalAssignments: s.totalAssignments ?? assignments.length,
+                totalExperiments: s.totalExperiments ?? experiments.length,
+                assignmentOutOf: s.assignmentOutOf ?? 10,
+                experimentOutOf: s.experimentOutOf ?? 10,
+                assignments,
+                experiments,
+                createdAt: s.createdAt || Date.now(),
+                updatedAt: s.updatedAt || Date.now(),
+            };
+        });
+
+        await persist(rebuilt);
+    }, [persist]);
+
     const isDuplicateCode = useCallback((code) => {
         return subjects.some((s) => s.code.toLowerCase() === code.toLowerCase());
     }, [subjects]);
@@ -272,6 +309,7 @@ export const DataProvider = ({ children }) => {
                 updateItemSubmissionDate,
                 updateItemFiles,
                 resetAllData,
+                importSubjects,
                 isDuplicateCode,
                 settings,
                 updateSettings,

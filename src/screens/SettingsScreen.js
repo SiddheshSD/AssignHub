@@ -8,6 +8,7 @@ import {
     ScrollView,
     Platform,
     Linking,
+    ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
@@ -16,6 +17,10 @@ import { useData } from '../context/DataContext';
 import { SPACING, RADIUS, FONT_SIZE } from '../constants/theme';
 import { rescheduleAllNotifications } from '../services/notifications';
 import { requestStorageDirectory, getFolderDisplayName } from '../services/fileManager';
+import * as FileSystem from 'expo-file-system/legacy';
+import { StorageAccessFramework } from 'expo-file-system/legacy';
+import * as Sharing from 'expo-sharing';
+import * as DocumentPicker from 'expo-document-picker';
 
 function SettingRow({ icon, label, description, colors, onPress, right, danger }) {
     return (
@@ -115,7 +120,9 @@ function DaySelector({ value, onChange, colors, primary }) {
 
 export default function SettingsScreen() {
     const { colors, primary, isDark, preference, setThemePreference } = useTheme();
-    const { resetAllData, stats, settings, updateSettings, subjects } = useData();
+    const { resetAllData, stats, settings, updateSettings, subjects, importSubjects } = useData();
+    const [isExporting, setIsExporting] = useState(false);
+    const [isImporting, setIsImporting] = useState(false);
 
     const handleReset = () => {
         Alert.alert(
@@ -167,6 +174,147 @@ export default function SettingsScreen() {
                 },
             ]
         );
+    };
+
+    const handleExport = async () => {
+        setIsExporting(true);
+        try {
+            const exportData = {
+                version: '1.2.5',
+                exportDate: new Date().toISOString(),
+                subjects: subjects.map((s) => ({
+                    name: s.name,
+                    code: s.code,
+                    totalAssignments: s.totalAssignments,
+                    totalExperiments: s.totalExperiments,
+                    assignmentOutOf: s.assignmentOutOf ?? 10,
+                    experimentOutOf: s.experimentOutOf ?? 10,
+                    createdAt: s.createdAt,
+                    updatedAt: s.updatedAt,
+                    assignments: s.assignments.map((a) => ({
+                        label: a.label,
+                        status: a.status,
+                        marks: a.marks,
+                        submissionDate: a.submissionDate,
+                    })),
+                    experiments: s.experiments.map((e) => ({
+                        label: e.label,
+                        status: e.status,
+                        marks: e.marks,
+                        submissionDate: e.submissionDate,
+                    })),
+                })),
+            };
+
+            const jsonStr = JSON.stringify(exportData, null, 2);
+            const fileName = `AssignHUB_Backup_${new Date().toISOString().split('T')[0]}.json`;
+            const cacheFileUri = FileSystem.cacheDirectory + fileName;
+
+            await FileSystem.writeAsStringAsync(cacheFileUri, jsonStr, {
+                encoding: FileSystem.EncodingType.UTF8,
+            });
+
+            // Save directly to user's chosen SAF folder
+            let savedToFolder = false;
+            if (settings.storageDirUri) {
+                try {
+                    const safFileUri = await StorageAccessFramework.createFileAsync(
+                        settings.storageDirUri,
+                        fileName,
+                        'application/json'
+                    );
+                    await FileSystem.writeAsStringAsync(safFileUri, jsonStr, {
+                        encoding: FileSystem.EncodingType.UTF8,
+                    });
+                    savedToFolder = true;
+                } catch (safError) {
+                    console.warn('Could not save to SAF folder:', safError);
+                }
+            }
+
+            // Also share via share sheet
+            const canShare = await Sharing.isAvailableAsync();
+            if (canShare) {
+                await Sharing.shareAsync(cacheFileUri, {
+                    mimeType: 'application/json',
+                    dialogTitle: 'Share AssignHUB Backup',
+                    UTI: 'public.json',
+                });
+            }
+
+            if (savedToFolder) {
+                const folderName = getFolderDisplayName(settings.storageDirUri);
+                Alert.alert(
+                    'Export Successful',
+                    `Backup saved to your folder:\n${folderName}\n\nFile: ${fileName}`
+                );
+            } else if (!canShare) {
+                Alert.alert('Export Saved', `Backup file saved:\n${fileName}`);
+            }
+        } catch (error) {
+            console.error('Export error:', error);
+            Alert.alert('Export Failed', 'Could not export data. Please try again.');
+        } finally {
+            setIsExporting(false);
+        }
+    };
+
+    const handleImport = async () => {
+        try {
+            const result = await DocumentPicker.getDocumentAsync({
+                type: 'application/json',
+                copyToCacheDirectory: true,
+            });
+
+            if (result.canceled) return;
+
+            const file = result.assets?.[0];
+            if (!file) return;
+
+            setIsImporting(true);
+
+            const content = await FileSystem.readAsStringAsync(file.uri, {
+                encoding: FileSystem.EncodingType.UTF8,
+            });
+
+            const importData = JSON.parse(content);
+
+            if (!importData.subjects || !Array.isArray(importData.subjects)) {
+                Alert.alert('Invalid File', 'This file does not contain valid AssignHUB data.');
+                setIsImporting(false);
+                return;
+            }
+
+            Alert.alert(
+                'Import Data',
+                `This will replace all your current data with ${importData.subjects.length} subjects from the backup (${importData.exportDate ? new Date(importData.exportDate).toLocaleDateString() : 'unknown date'}).\n\nThis cannot be undone.`,
+                [
+                    { text: 'Cancel', style: 'cancel', onPress: () => setIsImporting(false) },
+                    {
+                        text: 'Import',
+                        style: 'destructive',
+                        onPress: async () => {
+                            try {
+                                await importSubjects(importData.subjects);
+                                Alert.alert(
+                                    'Import Successful',
+                                    `${importData.subjects.length} subjects have been imported successfully.`
+                                );
+                            } catch (err) {
+                                console.error('Import error:', err);
+                                Alert.alert('Import Failed', 'Could not import data. The file may be corrupted.');
+                            } finally {
+                                setIsImporting(false);
+                            }
+                        },
+                    },
+                ]
+            );
+        } catch (error) {
+            console.error('Import error:', error);
+            Alert.alert('Import Failed', 'Could not read the file. Make sure it is a valid AssignHUB backup file.');
+            setIsImporting(false);
+        }
     };
 
     const folderDisplayName = getFolderDisplayName(settings.storageDirUri);
@@ -277,9 +425,53 @@ export default function SettingsScreen() {
                     <View style={styles.storageNote}>
                         <MaterialCommunityIcons name="information-outline" size={14} color={colors.textTertiary} />
                         <Text style={[styles.storageNoteText, { color: colors.textTertiary }]}>
-                            Choose a folder on your phone (e.g. Downloads) where assignment files will be saved. Files are auto-renamed based on subject code and assignment/experiment number.
+                            Choose a folder on your phone (e.g. Downloads) where files will be saved. Files are organized into subject folders (SubjectName_SubjectCode) and auto-renamed as Assignment_1_SubjectName.pdf or Experiment_2_SubjectName.pdf.
                         </Text>
                     </View>
+                </View>
+
+                {/* Export/Import Section */}
+                <View style={[styles.section, { backgroundColor: colors.card, shadowColor: colors.shadow }]}>
+                    <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>BACKUP & RESTORE</Text>
+
+                    <View style={[styles.backupInfo, { backgroundColor: colors.surfaceVariant, borderColor: colors.border }]}>
+                        <MaterialCommunityIcons name="information-outline" size={16} color={primary} />
+                        <Text style={[styles.backupInfoText, { color: colors.textSecondary }]}>
+                            Export your subjects, assignment/experiment statuses, marks, and dates as a backup file. Import to restore on any device.
+                        </Text>
+                    </View>
+
+                    <TouchableOpacity
+                        style={[styles.backupBtn, { backgroundColor: primary }]}
+                        onPress={handleExport}
+                        activeOpacity={0.8}
+                        disabled={isExporting || subjects.length === 0}
+                    >
+                        {isExporting ? (
+                            <ActivityIndicator size="small" color="#FFF" />
+                        ) : (
+                            <MaterialCommunityIcons name="database-export-outline" size={20} color="#FFF" />
+                        )}
+                        <Text style={styles.backupBtnText}>
+                            {isExporting ? 'Exporting...' : `Export Data (${subjects.length} subjects)`}
+                        </Text>
+                    </TouchableOpacity>
+
+                    <TouchableOpacity
+                        style={[styles.backupBtn, styles.importBtn, { borderColor: primary }]}
+                        onPress={handleImport}
+                        activeOpacity={0.8}
+                        disabled={isImporting}
+                    >
+                        {isImporting ? (
+                            <ActivityIndicator size="small" color={primary} />
+                        ) : (
+                            <MaterialCommunityIcons name="database-import-outline" size={20} color={primary} />
+                        )}
+                        <Text style={[styles.backupBtnText, styles.importBtnText, { color: primary }]}>
+                            {isImporting ? 'Importing...' : 'Import Data'}
+                        </Text>
+                    </TouchableOpacity>
                 </View>
 
                 {/* Data Section */}
@@ -307,7 +499,7 @@ export default function SettingsScreen() {
                     <SettingRow
                         icon="information-outline"
                         label="App Version"
-                        description="1.2.4"
+                        description="1.2.5"
                         colors={colors}
                     />
                     <SettingRow
@@ -335,13 +527,13 @@ export default function SettingsScreen() {
                         colors={colors}
                         onPress={() => Linking.openURL('https://github.com/SiddheshSD')}
                     />
-                    <SettingRow
+                    {/* <SettingRow
                         icon="web"
                         label="Portfolio"
                         description="Visit my website"
                         colors={colors}
                         onPress={() => Linking.openURL('https://YOUR_PORTFOLIO_URL')}
-                    />
+                    /> */}
                     <SettingRow
                         icon="instagram"
                         label="Instagram"
@@ -501,6 +693,43 @@ const styles = StyleSheet.create({
         fontSize: FONT_SIZE.xs,
         flex: 1,
         lineHeight: 16,
+    },
+
+    // Backup & Restore
+    backupInfo: {
+        flexDirection: 'row',
+        alignItems: 'flex-start',
+        padding: SPACING.md,
+        borderRadius: RADIUS.md,
+        borderWidth: 1,
+        marginBottom: SPACING.md,
+        gap: 8,
+    },
+    backupInfoText: {
+        fontSize: FONT_SIZE.xs,
+        flex: 1,
+        lineHeight: 16,
+    },
+    backupBtn: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        borderRadius: RADIUS.md,
+        paddingVertical: SPACING.md + 2,
+        marginBottom: SPACING.sm,
+        gap: 8,
+    },
+    backupBtnText: {
+        color: '#FFF',
+        fontSize: FONT_SIZE.md,
+        fontWeight: '700',
+    },
+    importBtn: {
+        backgroundColor: 'transparent',
+        borderWidth: 1.5,
+    },
+    importBtnText: {
+        color: '#000',
     },
 
     row: {
