@@ -7,6 +7,7 @@ import {
     Alert,
     ScrollView,
     Platform,
+    Linking,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
@@ -306,20 +307,47 @@ export default function SettingsScreen() {
                     <SettingRow
                         icon="information-outline"
                         label="App Version"
-                        description="1.2.3"
+                        description="1.2.4"
                         colors={colors}
                     />
                     <SettingRow
-                        icon="react"
-                        label="Built with"
-                        description="Expo / React Native"
+                        icon="copyright"
+                        label="© SiddheshSD"
+                        description="All rights reserved"
                         colors={colors}
                     />
+                </View>
+
+                {/* Socials Section */}
+                <View style={[styles.section, { backgroundColor: colors.card, shadowColor: colors.shadow }]}>
+                    <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>CONNECT</Text>
                     <SettingRow
-                        icon="heart-outline"
-                        label="AssignHub"
-                        description="Track your academic progress"
+                        icon="linkedin"
+                        label="LinkedIn"
+                        description="Connect with me"
                         colors={colors}
+                        onPress={() => Linking.openURL('https://www.linkedin.com/in/siddhesh-dicholkar')}
+                    />
+                    <SettingRow
+                        icon="github"
+                        label="GitHub"
+                        description="View my projects"
+                        colors={colors}
+                        onPress={() => Linking.openURL('https://github.com/SiddheshSD')}
+                    />
+                    <SettingRow
+                        icon="web"
+                        label="Portfolio"
+                        description="Visit my website"
+                        colors={colors}
+                        onPress={() => Linking.openURL('https://YOUR_PORTFOLIO_URL')}
+                    />
+                    <SettingRow
+                        icon="instagram"
+                        label="Instagram"
+                        description="Follow me"
+                        colors={colors}
+                        onPress={() => Linking.openURL('https://instagram.com/siddhesh_005')}
                     />
                 </View>
             </ScrollView>

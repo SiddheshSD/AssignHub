@@ -430,7 +430,7 @@ export default function SubjectDetailScreen({ route, navigation }) {
         if (picked.length === 0) return;
 
         const currentFiles = filesTargetItem.files || [];
-        const saved = await saveFiles(picked, subject.code, filesTargetItem.label, currentFiles);
+        const saved = await saveFiles(picked, subject.code, subject.name, filesTargetItem.label, currentFiles);
         if (saved.length > 0) {
             const updatedFiles = [...currentFiles, ...saved];
             await updateItemFiles(subjectId, filesTargetItem.id, itemType, updatedFiles);

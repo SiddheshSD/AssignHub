@@ -1,76 +1,106 @@
 # AssignHub 📚
 
-**AssignHub** is a premium, offline-first mobile application designed to help students track their academic progress seamlessly. Built with React Native and Expo, it offers a clean, modern interface to manage subjects, assignments, and experiments with ease.
-
-![App Header](https://via.placeholder.com/800x400.png?text=AssignHub+-+Assignment+Tracking+Made+Easy)
+**AssignHub** is a premium, offline-first mobile application expertly designed to help students systematically manage, track, and optimize their academic progress. Built with React Native and Expo, the app features a highly intuitive user interface seamlessly managing subjects, assignments, experiments, and associated files—all without needing an internet connection.
 
 ## ✨ Features
 
-- **📊 Intelligent Dashboard**: Get an at-a-glance overview of your total progress. Features circular progress indicators and detailed stat cards for subjects, assignments, and experiments.
-- **📚 Subject Management**: Add, edit, and delete subjects. Customize the number of assignments and experiments for each subject.
-- **✅ Status Tracking**: Cycle through item statuses: `Not Given` ➔ `Incomplete` ➔ `Complete` ➔ `Checked`.
-- **🌓 Dynamic Theming**: Supports Light, Dark, and System modes with a beautiful `#6C63FF` primary accent. Styling is consistent and premium across all screens.
-- **💾 Offline Persistence**: All data is stored locally on your device using `AsyncStorage`, ensuring your information is always accessible without an internet connection.
-- **📱 Responsive Design**: Optimized for both iOS and Android with smooth animations and intuitive navigation.
+- **📊 Intelligent Dashboard**: 
+  - Get a robust overview of your total progress featuring a dynamic **Pie Chart** for tracking the statuses of all your tasks (`Not Given`, `Incomplete`, `Complete`, `Checked`).
+  - Visualize your academic performance with a **Marks Graph**, outlining the average scores across assignments and experiments for all subjects.
+  - Quick-access **Recent Subjects** list that updates instantly whenever modifications are made, putting your most active subjects just a tap away.
+
+- **📚 Advanced Subject Management**:
+  - Seamlessly add, edit, and delete subjects with unique codes and track varying numbers of assignments or experiments (even setting counts to zero).
+
+- **📝 Marks Integration**:
+  - Input specific marks achieved for every single assignment or experiment.
+  - Customize the maximum "Out of" marks uniquely for assignments and differently for experiments per subject.
+
+- **📁 Smart File Management**:
+  - Attach files to specific assignments and experiments directly using `expo-document-picker`.
+  - Intelligently organizes all attachments into dedicated subject-specific folders (e.g., `Maths_CSC401`).
+  - Auto-renames files uniquely (e.g., `Assignment_1_Maths.pdf`) avoiding overrides and confusion.
+  - Successfully parses and handles extremely large files seamlessly (up to **250MB**) with memory efficiency—say goodbye to `OutOfMemoryErrors`!
+
+- **✅ Progressive Status Tracking**:
+  - Cycle effortlessly through the life cycle of every task: `Not Given` ➔ `Incomplete` ➔ `Complete` ➔ `Checked`.
+
+- **🌓 Dynamic Theming**:
+  - Choose between Light, Dark, or automatically match your System's preference, accented with a vibrant primary color (`#6C63FF`) across a cohesive UI.
+
+- **💾 100% Offline Persistence**:
+  - Your data is completely localized on the device harnessing `AsyncStorage` and the File System—lightning fast and fully private.
 
 ## 🚀 Tech Stack
 
-- **Framework**: [Expo](https://expo.dev/) (SDK 54) / React Native
-- **Navigation**: [React Navigation](https://reactnavigation.org/) (Bottom Tabs & Native Stack)
-- **State Management**: React Context API
-- **Storage**: @react-native-async-storage/async-storage
-- **Icons**: @expo/vector-icons (Material Community Icons)
-- **UI Components**: React Native SVG for progress charts
+- **Framework**: [Expo](https://expo.dev/) (SDK 54) / [React Native](https://reactnative.dev)
+- **Navigation**: [React Navigation 7](https://reactnavigation.org/) (Bottom Tabs & Native Stack)
+- **State & Data Handling**: React Context API
+- **Local Storage**: `@react-native-async-storage/async-storage` & `expo-file-system`
+- **File & Media Handling**: `expo-document-picker`, `expo-sharing`, `expo-intent-launcher`
+- **Charts & Layout**: `react-native-svg`
+- **Notifications**: `expo-notifications` for seamless local reminders
 
 ## 📂 Project Structure
 
 ```text
 AssignHUB/
 ├── src/
-│   ├── components/       # Reusable UI components
-│   ├── constants/        # Theme definitions and global constants
-│   ├── context/          # Data and Theme Context Providers
-│   ├── navigation/       # Navigation configuration (BottomTabs, Stacks)
-│   ├── screens/          # Application screens (Dashboard, Subjects, Details, etc.)
-│   └── services/         # Storage and utility services
-├── App.js                # Entry point
-└── package.json          # Dependencies and scripts
+│   ├── constants/        # Theme definitions (Colours, Styles), global constants
+│   ├── context/          # Context Providers (Theme and Data persistence)
+│   ├── navigation/       # Navigation configuration (BottomTabs, Stack Routing)
+│   ├── screens/          # Application screens (Dashboard, Subjects, Settings, Add/Detail)
+│   └── services/         # Storage managers, Notifications, and the core FileManager 
+├── App.js                # Core App Entry point
+└── app.json              # Expo configuration (Permissions, plugins, bundle identifiers)
 ```
 
 ## 🛠️ Installation & Setup
 
 ### Prerequisites
-- [Node.js](https://nodejs.org/) (LTS)
-- [Expo Go](https://expo.dev/client) app on your mobile device (to preview)
+- [Node.js](https://nodejs.org/) installed
+- **Expo Go** app on your physical mobile device, or configured Emulator/Simulator
 
-### Setup Steps
+### Steps to Run Correctly
 1. **Clone the repository**:
    ```bash
-   git clone https://github.com/yourusername/assignhub.git
-   cd assignhub
+   git clone <repository_url>
+   cd AssignHUB
    ```
 
-2. **Install dependencies**:
+2. **Install all dependencies**:
    ```bash
    npm install
    ```
+   *(Note: This installs all peer dependencies handled efficiently under Node 18+ and React 19).*
 
-3. **Start the development server**:
+3. **Start the Expo server**:
    ```bash
-   npx expo start
+   npx expo start -c
    ```
+   *(We run `-c` to clear cache and ensure smooth loading)*
 
-4. **Run the app**:
-   - Scan the QR code using **Expo Go** (Android) or the **Camera app** (iOS).
-   - Alternatively, press `a` for Android Emulator or `i` for iOS Simulator.
+4. **Launch the App**:
+   - For **Android**: Scan the QR code with the Expo Go app. Alternatively, press `a` to load on a configured emulator.
+   - For **iOS**: Open the Camera app to scan the QR code and prompt Expo Go, or press `i` for the standard simulator.
 
 ## 📖 Usage Guide
 
-- **Adding a Subject**: Navigate to the `Subjects` tab and tap the '+' button. Fill in the subject name, code, and counts.
-- **Updating Status**: On the `Subject Detail` screen, tap any assignment or experiment badge to cycle through its status.
-- **Editing Suject**: Tap the pencil icon in the `Subject Detail` header to change the code or adjust the number of items.
-- **Changing Theme**: Go to `Settings` to switch between Light, Dark, or System theme.
+- **Dashboard**: Upon opening, you will land on the Dashboard. Review your aggregated status pie chart and your average performance graph. Tap on any subject in your 'Recently Updated' list to jump quickly back into work.
+- **Subjects Setup**: Tap the 'Subjects' tab at the bottom and hit the powerful `+` button in the top right.
+- **Details and Marks**: From any subject's Detail screen, tap to toggle item statuses, input achieved marks, or attach related files/receipts directly to an assignment item. All configurations accurately persist instantly.
+- **Theme and Info**: Manage global settings including UI aesthetics (Dark Mode) or visit the About section to see credits and external references in the 'Settings' tab.
+
+## 📥 Downloads / Releases
+
+Download the specific version installed builds below (APK/AAB configurations generated via EAS). I've left the placeholder `URL_HERE` strings for you to paste your specific Expo download links!
+
+- [Version 1.2.4 (Latest) - Bug fixes & File Storage Limit upgrades](URL_HERE)
+- [Version 1.2.2](URL_HERE)
+- [Version 1.2.1](URL_HERE)
+- [Version 1.2.0](URL_HERE)
+- [Version 1.1.0](URL_HERE)
+- [Version 1.0.0](URL_HERE)
 
 ---
-
-Built with ❤️ for students who want to stay organized.
+Built with ❤️ for students executing with total focus.

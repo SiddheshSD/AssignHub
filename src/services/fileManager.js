@@ -10,6 +10,13 @@ import { loadSettings } from './storage';
 // Base directory for internal file storage (always available)
 const INTERNAL_BASE_DIR = FileSystem.documentDirectory + 'AssignHUB_Files/';
 
+// Maximum file size: 250 MB
+const MAX_FILE_SIZE_BYTES = 250 * 1024 * 1024;
+const MAX_FILE_SIZE_LABEL = '250 MB';
+
+// Files above this size will skip SAF base64 copy (to avoid OutOfMemoryError)
+const SAF_BASE64_LIMIT = 80 * 1024 * 1024; // 80 MB
+
 /**
  * Ensure the internal storage directory exists.
  */
@@ -24,7 +31,6 @@ async function ensureInternalDir(subDir = '') {
 
 /**
  * Request the user to pick a folder on their phone using SAF (Android).
- * Opens the system folder picker. Returns the granted directory URI, or null if cancelled.
  */
 export async function requestStorageDirectory() {
     try {
@@ -49,7 +55,7 @@ export async function getSavedDirectoryUri() {
 }
 
 /**
- * Sanitize a name for use in file names.
+ * Sanitize a name for use in file/folder names.
  */
 function sanitizeName(name) {
     return name.replace(/[^a-zA-Z0-9_-]/g, '_');
@@ -93,15 +99,23 @@ function getMimeFromExtension(fileName) {
 }
 
 /**
- * Generate a proper filename based on subject and item info.
- * Format: SUBJECTCODE_Assignment_1.pdf or SUBJECTCODE_Experiment_2.docx
+ * Generate folder name for a subject: SubjectName_SubjectCode
+ * e.g. Maths_CSC401
  */
-function generateFileName(subjectCode, itemLabel, originalName, index) {
+export function generateSubjectFolderName(subjectName, subjectCode) {
+    return sanitizeName(subjectName) + '_' + sanitizeName(subjectCode);
+}
+
+/**
+ * Generate a proper filename: Assignment_1_Maths.pdf, Experiment_2_Maths.pdf
+ */
+function generateFileName(subjectName, itemLabel, originalName, index) {
     const ext = getExtension(originalName);
-    const sanitizedSubject = sanitizeName(subjectCode);
+    // itemLabel = "Assignment 1" → "Assignment_1"
     const sanitizedLabel = sanitizeName(itemLabel.replace(/\s+/g, '_'));
+    const sanitizedName = sanitizeName(subjectName);
     const suffix = index > 0 ? `_${index + 1}` : '';
-    return `${sanitizedSubject}_${sanitizedLabel}${suffix}${ext}`;
+    return `${sanitizedLabel}_${sanitizedName}${suffix}${ext}`;
 }
 
 /**
@@ -111,7 +125,6 @@ export function getFolderDisplayName(uri) {
     if (!uri) return 'Not set';
     try {
         const decoded = decodeURIComponent(uri);
-        // SAF URIs: content://com.android.externalstorage.documents/tree/primary%3ADownloads%2FAssignHUB
         const match = decoded.match(/tree\/[^:]+:(.+)$/);
         if (match) {
             return match[1].replace(/\//g, ' / ');
@@ -120,6 +133,34 @@ export function getFolderDisplayName(uri) {
         return parts[parts.length - 1] || 'Selected Folder';
     } catch {
         return 'Selected Folder';
+    }
+}
+
+/**
+ * Try to get or create a subject subfolder inside a SAF directory.
+ * Returns the SAF URI of the subfolder, or the parent URI as fallback.
+ */
+async function getOrCreateSAFSubFolder(parentDirUri, folderName) {
+    // First try to find existing folder
+    try {
+        const contents = await StorageAccessFramework.readDirectoryAsync(parentDirUri);
+        for (const itemUri of contents) {
+            const decoded = decodeURIComponent(itemUri);
+            if (decoded.endsWith(folderName) || decoded.endsWith(encodeURIComponent(folderName))) {
+                return itemUri;
+            }
+        }
+    } catch (e) {
+        // Can't read directory, try creating
+    }
+
+    // Create new subfolder
+    try {
+        const subDirUri = await StorageAccessFramework.makeDirectoryAsync(parentDirUri, folderName);
+        return subDirUri;
+    } catch (error) {
+        console.warn('Could not create subfolder, using root folder:', error);
+        return parentDirUri;
     }
 }
 
@@ -139,7 +180,29 @@ export async function pickDocuments() {
             return [];
         }
 
-        return result.assets || [];
+        const assets = result.assets || [];
+
+        // Check file sizes
+        const validFiles = [];
+        const oversizedFiles = [];
+
+        for (const file of assets) {
+            const fileSize = file.size || 0;
+            if (fileSize > MAX_FILE_SIZE_BYTES) {
+                oversizedFiles.push(file.name);
+            } else {
+                validFiles.push(file);
+            }
+        }
+
+        if (oversizedFiles.length > 0) {
+            Alert.alert(
+                'File Too Large',
+                `The following file(s) exceed the ${MAX_FILE_SIZE_LABEL} limit and were skipped:\n\n${oversizedFiles.join('\n')}\n\nPlease select smaller files.`
+            );
+        }
+
+        return validFiles;
     } catch (error) {
         console.error('Error picking documents:', error);
         Alert.alert('Error', 'Failed to pick documents. Please try again.');
@@ -148,25 +211,33 @@ export async function pickDocuments() {
 }
 
 /**
- * Save picked files to the user's chosen SAF directory AND internal app storage.
- * - Always saves an internal copy so the app can reliably open files.
- * - If a SAF folder is chosen in Settings, also saves there (visible in file manager).
- * - Auto-renames files: SUBJECTCODE_Assignment_1.pdf, etc.
+ * Save picked files to storage.
+ * - Creates a subject folder: SubjectName_SubjectCode
+ * - Auto-renames files: Assignment_1_Maths.pdf, Experiment_2_Maths.pdf
+ * - Saves to both internal storage AND the user's chosen phone folder (SAF)
+ * - Uses copyAsync for internal (avoids OutOfMemoryError on large files)
  */
-export async function saveFiles(pickedFiles, subjectCode, itemLabel, existingFiles = []) {
+export async function saveFiles(pickedFiles, subjectCode, subjectName, itemLabel, existingFiles = []) {
     const settings = await loadSettings();
     const savedDirUri = settings.storageDirUri;
     const savedFiles = [];
     const startIndex = existingFiles.length;
 
-    // Ensure internal subject directory exists
-    const subjectSubDir = sanitizeName(subjectCode);
-    const internalDir = await ensureInternalDir(subjectSubDir);
+    // Create internal subject folder: Maths_CSC401/
+    const folderName = generateSubjectFolderName(subjectName, subjectCode);
+    const internalDir = await ensureInternalDir(folderName);
+
+    // Get or create SAF subject subfolder (if SAF is configured)
+    let safSubFolderUri = null;
+    if (savedDirUri) {
+        safSubFolderUri = await getOrCreateSAFSubFolder(savedDirUri, folderName);
+    }
 
     for (let i = 0; i < pickedFiles.length; i++) {
         const file = pickedFiles[i];
         try {
-            const newName = generateFileName(subjectCode, itemLabel, file.name, startIndex + i);
+            // Generate auto-name: Assignment_1_Maths.pdf
+            const newName = generateFileName(subjectName, itemLabel, file.name, startIndex + i);
             const fileMime = file.mimeType || getMimeFromExtension(file.name);
 
             // Check source file
@@ -176,36 +247,71 @@ export async function saveFiles(pickedFiles, subjectCode, itemLabel, existingFil
                 continue;
             }
 
-            // Read file content as base64
-            const fileContent = await FileSystem.readAsStringAsync(file.uri, {
-                encoding: FileSystem.EncodingType.Base64,
-            });
+            const fileSize = file.size || sourceInfo.size || 0;
 
-            let externalUri = null;
+            // Double-check file size
+            if (fileSize > MAX_FILE_SIZE_BYTES) {
+                Alert.alert('File Too Large', `"${file.name}" exceeds ${MAX_FILE_SIZE_LABEL}. Skipped.`);
+                continue;
+            }
 
-            // Save to SAF directory (user's phone folder) if configured
-            if (savedDirUri) {
-                try {
-                    const safFileUri = await StorageAccessFramework.createFileAsync(
-                        savedDirUri,
-                        newName,
-                        fileMime
-                    );
-                    await FileSystem.writeAsStringAsync(safFileUri, fileContent, {
+            // ---- INTERNAL COPY (using copyAsync, no memory issues) ----
+            const internalUri = internalDir + newName;
+            try {
+                // Delete existing file at this path if any
+                const existingInfo = await FileSystem.getInfoAsync(internalUri);
+                if (existingInfo.exists) {
+                    await FileSystem.deleteAsync(internalUri, { idempotent: true });
+                }
+                await FileSystem.copyAsync({ from: file.uri, to: internalUri });
+            } catch (copyError) {
+                console.error('Internal copy failed, trying base64 fallback:', copyError);
+                // Fallback to base64 read+write for smaller files
+                if (fileSize < SAF_BASE64_LIMIT) {
+                    const content = await FileSystem.readAsStringAsync(file.uri, {
                         encoding: FileSystem.EncodingType.Base64,
                     });
-                    externalUri = safFileUri;
-                } catch (safError) {
-                    console.error('SAF save error:', safError);
-                    // File still saved internally below
+                    await FileSystem.writeAsStringAsync(internalUri, content, {
+                        encoding: FileSystem.EncodingType.Base64,
+                    });
+                } else {
+                    throw copyError;
                 }
             }
 
-            // Always save internal copy (reliable for opening)
-            const internalUri = internalDir + newName;
-            await FileSystem.writeAsStringAsync(internalUri, fileContent, {
-                encoding: FileSystem.EncodingType.Base64,
-            });
+            let externalUri = null;
+
+            // ---- SAF COPY (to user's phone folder) ----
+            if (safSubFolderUri) {
+                try {
+                    if (fileSize <= SAF_BASE64_LIMIT) {
+                        // For files ≤ 80MB: use base64 read+write (reliable with SAF)
+                        const fileContent = await FileSystem.readAsStringAsync(internalUri, {
+                            encoding: FileSystem.EncodingType.Base64,
+                        });
+                        const safFileUri = await StorageAccessFramework.createFileAsync(
+                            safSubFolderUri,
+                            newName,
+                            fileMime
+                        );
+                        await FileSystem.writeAsStringAsync(safFileUri, fileContent, {
+                            encoding: FileSystem.EncodingType.Base64,
+                        });
+                        externalUri = safFileUri;
+                    } else {
+                        // For large files (> 80MB): skip SAF to avoid OutOfMemoryError
+                        console.warn(`File "${file.name}" (${formatFileSize(fileSize)}) is too large for SAF copy, saving internally only.`);
+                    }
+                } catch (safError) {
+                    const errorMsg = safError?.message || String(safError);
+                    if (errorMsg.includes('OutOfMemory') || errorMsg.includes('out of memory')) {
+                        console.error('OutOfMemoryError during SAF save:', safError);
+                        // File is still saved internally, just warn
+                    } else {
+                        console.error('SAF save error:', safError);
+                    }
+                }
+            }
 
             savedFiles.push({
                 id: Date.now().toString(36) + Math.random().toString(36).substr(2, 9),
@@ -214,20 +320,31 @@ export async function saveFiles(pickedFiles, subjectCode, itemLabel, existingFil
                 uri: internalUri,
                 externalUri: externalUri,
                 mimeType: fileMime,
-                size: file.size || sourceInfo.size || 0,
+                size: fileSize,
                 addedAt: Date.now(),
             });
         } catch (error) {
             console.error('Error saving file:', file.name, error);
-            Alert.alert('Error', `Failed to save "${file.name}". ${error.message || ''}`);
+            const errorMsg = error?.message || String(error);
+            if (errorMsg.includes('OutOfMemory') || errorMsg.includes('out of memory')) {
+                Alert.alert(
+                    'File Too Large',
+                    `"${file.name}" could not be saved — the file is too large to process. Try a smaller file (under 80 MB works best).`
+                );
+            } else {
+                Alert.alert('Error', `Failed to save "${file.name}". ${errorMsg}`);
+            }
         }
     }
 
     if (savedFiles.length > 0) {
-        const location = savedDirUri ? 'your phone folder and app storage' : 'app storage only';
+        const location = savedDirUri ? `"${folderName}" in your phone folder` : 'app storage only';
+        const largeSaveNote = savedFiles.some(f => f.size > SAF_BASE64_LIMIT && !f.externalUri && savedDirUri)
+            ? '\n\nNote: Some large files were only saved internally due to size limits.'
+            : '';
         Alert.alert(
             'Files Saved',
-            `${savedFiles.length} file(s) saved to ${location}.${!savedDirUri ? '\n\nTip: Go to Settings → File Storage to choose a folder on your phone.' : ''}`
+            `${savedFiles.length} file(s) saved to ${location}.${!savedDirUri ? '\n\nTip: Go to Settings → File Storage to choose a folder on your phone.' : ''}${largeSaveNote}`
         );
     }
 
@@ -256,8 +373,7 @@ export async function deleteFile(fileUri, externalUri) {
             await StorageAccessFramework.deleteAsync(externalUri, { idempotent: true });
         }
     } catch (error) {
-        // SAF deletion can fail if permission was revoked or file was already deleted
-        console.warn('Could not delete external file (may have been removed already):', error);
+        console.warn('Could not delete external file:', error);
     }
 }
 
@@ -313,7 +429,7 @@ export async function openFile(fileUri, mimeType) {
                 const contentUri = await FileSystem.getContentUriAsync(fileUri);
                 await IntentLauncher.startActivityAsync('android.intent.action.VIEW', {
                     data: contentUri,
-                    flags: 1, // FLAG_GRANT_READ_URI_PERMISSION
+                    flags: 1,
                     type: mimeType || '*/*',
                 });
             } catch (intentError) {
@@ -380,9 +496,10 @@ export function getFileColor(mimeType) {
 /**
  * Delete all internal files for a specific subject.
  */
-export async function deleteSubjectFiles(subjectCode) {
+export async function deleteSubjectFiles(subjectName, subjectCode) {
     try {
-        const subjectDir = INTERNAL_BASE_DIR + sanitizeName(subjectCode) + '/';
+        const folderName = generateSubjectFolderName(subjectName, subjectCode);
+        const subjectDir = INTERNAL_BASE_DIR + folderName + '/';
         const info = await FileSystem.getInfoAsync(subjectDir);
         if (info.exists) {
             await FileSystem.deleteAsync(subjectDir, { idempotent: true });
