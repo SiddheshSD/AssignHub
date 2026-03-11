@@ -35,13 +35,15 @@ export const DataProvider = ({ children }) => {
         setSettingsState(merged);
         await saveSettings(merged);
 
-        // If notification days changed, reschedule all notifications
-        if (newSettings.notificationDaysBefore !== undefined) {
+        // If notification days or time changed, reschedule all notifications
+        if (newSettings.notificationDaysBefore !== undefined ||
+            newSettings.notificationTimeHour !== undefined ||
+            newSettings.notificationTimeMinute !== undefined) {
             await rescheduleAllNotifications(subjects);
         }
     }, [settings, subjects]);
 
-    const addSubject = useCallback(async ({ name, code, totalAssignments, totalExperiments }) => {
+    const addSubject = useCallback(async ({ name, shortName, code, totalAssignments, totalExperiments, assignmentOutOf, experimentOutOf }) => {
         const assignments = Array.from({ length: totalAssignments }, (_, i) => ({
             id: generateId(),
             label: `Assignment ${i + 1}`,
@@ -63,11 +65,12 @@ export const DataProvider = ({ children }) => {
         const newSubject = {
             id: generateId(),
             name,
+            shortName: shortName || name,
             code,
             totalAssignments,
             totalExperiments,
-            assignmentOutOf: 10,
-            experimentOutOf: 10,
+            assignmentOutOf: assignmentOutOf ?? 10,
+            experimentOutOf: experimentOutOf ?? 10,
             assignments,
             experiments,
             createdAt: now,
@@ -92,7 +95,7 @@ export const DataProvider = ({ children }) => {
         await persist(updated);
     }, [subjects, persist]);
 
-    const updateSubject = useCallback(async (subjectId, { code, totalAssignments, totalExperiments, assignmentOutOf, experimentOutOf }) => {
+    const updateSubject = useCallback(async (subjectId, { name, shortName, code, totalAssignments, totalExperiments, assignmentOutOf, experimentOutOf }) => {
         const updated = subjects.map((s) => {
             if (s.id !== subjectId) return s;
 
@@ -137,6 +140,8 @@ export const DataProvider = ({ children }) => {
 
             return {
                 ...s,
+                name: name ?? s.name,
+                shortName: shortName ?? s.shortName ?? s.name,
                 code,
                 totalAssignments,
                 totalExperiments,
@@ -209,7 +214,9 @@ export const DataProvider = ({ children }) => {
                 type,
                 submissionDate,
                 itemId,
-                settings.notificationDaysBefore || 2
+                settings.notificationDaysBefore || 2,
+                settings.notificationTimeHour ?? 9,
+                settings.notificationTimeMinute ?? 0
             );
         } else {
             await cancelItemNotifications(itemId);
@@ -257,6 +264,7 @@ export const DataProvider = ({ children }) => {
             return {
                 id: generateId(),
                 name: s.name,
+                shortName: s.shortName || s.name,
                 code: s.code,
                 totalAssignments: s.totalAssignments ?? assignments.length,
                 totalExperiments: s.totalExperiments ?? experiments.length,

@@ -3,9 +3,12 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 const SUBJECTS_KEY = '@assignhub_subjects';
 const THEME_KEY = '@assignhub_theme';
 const SETTINGS_KEY = '@assignhub_settings';
+const PRIMARY_COLOR_KEY = '@assignhub_primary_color';
 
 export const DEFAULT_SETTINGS = {
     notificationDaysBefore: 2,
+    notificationTimeHour: 9,
+    notificationTimeMinute: 0,
     storageFolder: 'AssignHUB_Files',
     storageDirUri: null,
 };
@@ -66,8 +69,26 @@ export const saveSettings = async (settings) => {
 
 export const clearAllData = async () => {
     try {
-        await AsyncStorage.multiRemove([SUBJECTS_KEY, THEME_KEY, SETTINGS_KEY]);
+        await AsyncStorage.multiRemove([SUBJECTS_KEY, THEME_KEY, SETTINGS_KEY, PRIMARY_COLOR_KEY]);
     } catch (error) {
         console.error('Error clearing data:', error);
+    }
+};
+
+export const loadPrimaryColor = async () => {
+    try {
+        const color = await AsyncStorage.getItem(PRIMARY_COLOR_KEY);
+        return color || null;
+    } catch (error) {
+        console.error('Error loading primary color:', error);
+        return null;
+    }
+};
+
+export const savePrimaryColor = async (color) => {
+    try {
+        await AsyncStorage.setItem(PRIMARY_COLOR_KEY, color);
+    } catch (error) {
+        console.error('Error saving primary color:', error);
     }
 };

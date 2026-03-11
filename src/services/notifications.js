@@ -48,7 +48,9 @@ export async function scheduleDeadlineNotifications(
     itemType,
     deadlineDate,
     itemId,
-    daysBefore = 2
+    daysBefore = 2,
+    notifyHour = 9,
+    notifyMinute = 0
 ) {
     // Cancel existing notifications for this item first
     await cancelItemNotifications(itemId);
@@ -62,8 +64,8 @@ export async function scheduleDeadlineNotifications(
     for (let d = daysBefore; d >= 0; d--) {
         const notifyDate = new Date(deadline);
         notifyDate.setDate(notifyDate.getDate() - d);
-        // Set notification time to 9:00 AM
-        notifyDate.setHours(9, 0, 0, 0);
+        // Set notification time to user-configured time
+        notifyDate.setHours(notifyHour, notifyMinute, 0, 0);
 
         // Skip if notification time is in the past
         if (notifyDate <= now) continue;
@@ -71,11 +73,11 @@ export async function scheduleDeadlineNotifications(
         const daysLeft = d;
         let body;
         if (daysLeft === 0) {
-            body = `📅 Today is the deadline for ${itemLabel} (${subjectName})! Submit now!`;
+            body = `\uD83D\uDCC5 Today is the deadline for ${itemLabel} (${subjectName})! Submit now!`;
         } else if (daysLeft === 1) {
-            body = `⏰ ${itemLabel} (${subjectName}) is due tomorrow!`;
+            body = `\u23F0 ${itemLabel} (${subjectName}) is due tomorrow!`;
         } else {
-            body = `📝 ${itemLabel} (${subjectName}) is due in ${daysLeft} days.`;
+            body = `\uD83D\uDCDD ${itemLabel} (${subjectName}) is due in ${daysLeft} days.`;
         }
 
         await Notifications.scheduleNotificationAsync({
@@ -108,11 +110,13 @@ export async function cancelItemNotifications(itemId) {
 }
 
 /**
- * Re-schedule all notifications for all subjects (e.g., when daysBefore setting changes).
+ * Re-schedule all notifications for all subjects (e.g., when daysBefore or time setting changes).
  */
 export async function rescheduleAllNotifications(subjects) {
     const settings = await loadSettings();
     const daysBefore = settings.notificationDaysBefore || 2;
+    const notifyHour = settings.notificationTimeHour ?? 9;
+    const notifyMinute = settings.notificationTimeMinute ?? 0;
 
     // Cancel all existing scheduled notifications
     await Notifications.cancelAllScheduledNotificationsAsync();
@@ -128,7 +132,9 @@ export async function rescheduleAllNotifications(subjects) {
                     'assignment',
                     item.submissionDate,
                     item.id,
-                    daysBefore
+                    daysBefore,
+                    notifyHour,
+                    notifyMinute
                 );
             }
         }
@@ -142,7 +148,9 @@ export async function rescheduleAllNotifications(subjects) {
                     'experiment',
                     item.submissionDate,
                     item.id,
-                    daysBefore
+                    daysBefore,
+                    notifyHour,
+                    notifyMinute
                 );
             }
         }

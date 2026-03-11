@@ -200,27 +200,27 @@ function ItemRow({ item, type, subjectId, subjectCode, outOf, colors, isDark, pr
     );
 }
 
-function Stepper({ label, value, onChange, min = 0, max = 20, colors, primary }) {
+function CompactStepper({ label, value, onChange, min = 0, max = 20, colors, primary }) {
     return (
-        <View style={styles.stepperContainer}>
-            <Text style={[styles.stepperLabel, { color: colors.text }]}>{label}</Text>
-            <View style={[styles.stepperRow, { backgroundColor: colors.surfaceVariant, borderColor: colors.border }]}>
+        <View style={styles.compactStepperContainer}>
+            <Text style={[styles.compactStepperLabel, { color: colors.text }]}>{label}</Text>
+            <View style={[styles.compactStepperRow, { backgroundColor: colors.surfaceVariant, borderColor: colors.border }]}>
                 <TouchableOpacity
-                    style={[styles.stepperBtn, { opacity: value <= min ? 0.3 : 1 }]}
+                    style={[styles.compactStepperBtn, { opacity: value <= min ? 0.3 : 1 }]}
                     onPress={() => value > min && onChange(value - 1)}
                     disabled={value <= min}
                 >
-                    <MaterialCommunityIcons name="minus" size={22} color={primary} />
+                    <MaterialCommunityIcons name="minus" size={18} color={primary} />
                 </TouchableOpacity>
-                <View style={styles.stepperValueWrap}>
-                    <Text style={[styles.stepperValue, { color: colors.text }]}>{value}</Text>
+                <View style={styles.compactStepperValueWrap}>
+                    <Text style={[styles.compactStepperValue, { color: colors.text }]}>{value}</Text>
                 </View>
                 <TouchableOpacity
-                    style={[styles.stepperBtn, { opacity: value >= max ? 0.3 : 1 }]}
+                    style={[styles.compactStepperBtn, { opacity: value >= max ? 0.3 : 1 }]}
                     onPress={() => value < max && onChange(value + 1)}
                     disabled={value >= max}
                 >
-                    <MaterialCommunityIcons name="plus" size={22} color={primary} />
+                    <MaterialCommunityIcons name="plus" size={18} color={primary} />
                 </TouchableOpacity>
             </View>
         </View>
@@ -287,6 +287,8 @@ export default function SubjectDetailScreen({ route, navigation }) {
     const [filesTargetItem, setFilesTargetItem] = useState(null);
 
     // Edit form state
+    const [editName, setEditName] = useState('');
+    const [editShortName, setEditShortName] = useState('');
     const [editCode, setEditCode] = useState('');
     const [editAssignments, setEditAssignments] = useState(0);
     const [editExperiments, setEditExperiments] = useState(0);
@@ -324,6 +326,8 @@ export default function SubjectDetailScreen({ route, navigation }) {
         : null;
 
     const openEditModal = () => {
+        setEditName(subject.name);
+        setEditShortName(subject.shortName || subject.name);
         setEditCode(subject.code);
         setEditAssignments(subject.assignments.length);
         setEditExperiments(subject.experiments.length);
@@ -333,12 +337,24 @@ export default function SubjectDetailScreen({ route, navigation }) {
     };
 
     const handleSaveEdit = async () => {
+        const trimmedName = editName.trim();
+        const trimmedShortName = editShortName.trim();
         const trimmedCode = editCode.trim();
+        if (!trimmedName) {
+            Alert.alert('Validation', 'Subject name cannot be empty.');
+            return;
+        }
+        if (!trimmedShortName) {
+            Alert.alert('Validation', 'Short name cannot be empty. It is used for folder & file names.');
+            return;
+        }
         if (!trimmedCode) {
             Alert.alert('Validation', 'Subject code cannot be empty.');
             return;
         }
         await updateSubject(subjectId, {
+            name: trimmedName,
+            shortName: trimmedShortName,
             code: trimmedCode.toUpperCase(),
             totalAssignments: editAssignments,
             totalExperiments: editExperiments,
@@ -430,7 +446,7 @@ export default function SubjectDetailScreen({ route, navigation }) {
         if (picked.length === 0) return;
 
         const currentFiles = filesTargetItem.files || [];
-        const saved = await saveFiles(picked, subject.code, subject.name, filesTargetItem.label, currentFiles);
+        const saved = await saveFiles(picked, subject.code, subject.shortName || subject.name, filesTargetItem.label, currentFiles);
         if (saved.length > 0) {
             const updatedFiles = [...currentFiles, ...saved];
             await updateItemFiles(subjectId, filesTargetItem.id, itemType, updatedFiles);
@@ -486,7 +502,7 @@ export default function SubjectDetailScreen({ route, navigation }) {
                         {subject.name}
                     </Text>
                     <Text style={[styles.headerCode, { color: colors.textSecondary }]}>
-                        {subject.code}
+                        {subject.shortName || subject.name} • {subject.code}
                     </Text>
                 </View>
                 <TouchableOpacity onPress={openEditModal} style={styles.editBtn}>
@@ -674,12 +690,41 @@ export default function SubjectDetailScreen({ route, navigation }) {
                         </View>
 
                         <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
-                            {/* Subject Name (read-only) */}
+                            {/* Subject Name (Full Form) */}
                             <View style={styles.modalField}>
-                                <Text style={[styles.modalLabel, { color: colors.textSecondary }]}>Subject Name</Text>
-                                <View style={[styles.modalInputWrap, { backgroundColor: colors.surfaceVariant, borderColor: colors.border, opacity: 0.6 }]}>
-                                    <Text style={[styles.modalInputReadonly, { color: colors.text }]}>{subject.name}</Text>
+                                <Text style={[styles.modalLabel, { color: colors.textSecondary }]}>Subject Name (Full Form)</Text>
+                                <View style={[styles.modalInputWrap, { backgroundColor: colors.surfaceVariant, borderColor: colors.border }]}>
+                                    <TextInput
+                                        style={[styles.modalInput, { color: colors.text }]}
+                                        value={editName}
+                                        onChangeText={setEditName}
+                                        maxLength={80}
+                                        placeholderTextColor={colors.textTertiary}
+                                        placeholder="e.g. Data Structures & Algorithms"
+                                    />
                                 </View>
+                                <Text style={[styles.modalFieldHint, { color: colors.textTertiary }]}>Displayed on the subject page</Text>
+                            </View>
+
+                            {/* Short Name */}
+                            <View style={styles.modalField}>
+                                <View style={styles.modalLabelRow}>
+                                    <Text style={[styles.modalLabel, { color: colors.textSecondary }]}>Short Name</Text>
+                                    <View style={[styles.modalRequiredBadge, { backgroundColor: primary + '18' }]}>
+                                        <Text style={[styles.modalRequiredText, { color: primary }]}>Required</Text>
+                                    </View>
+                                </View>
+                                <View style={[styles.modalInputWrap, { backgroundColor: colors.surfaceVariant, borderColor: colors.border }]}>
+                                    <TextInput
+                                        style={[styles.modalInput, { color: colors.text }]}
+                                        value={editShortName}
+                                        onChangeText={setEditShortName}
+                                        maxLength={20}
+                                        placeholderTextColor={colors.textTertiary}
+                                        placeholder="e.g. DSA"
+                                    />
+                                </View>
+                                <Text style={[styles.modalFieldHint, { color: colors.textTertiary }]}>Used for folder & file names</Text>
                             </View>
 
                             {/* Subject Code */}
@@ -697,47 +742,49 @@ export default function SubjectDetailScreen({ route, navigation }) {
                                 </View>
                             </View>
 
-                            {/* Assignment Count */}
-                            <Stepper
-                                label="Assignments"
-                                value={editAssignments}
-                                onChange={setEditAssignments}
-                                min={0}
-                                colors={colors}
-                                primary={primary}
-                            />
+                            {/* Counts Section */}
+                            <Text style={[styles.modalSectionLabel, { color: colors.text }]}>Number of Items</Text>
+                            <View style={styles.compactStepperGrid}>
+                                <CompactStepper
+                                    label="Assignments"
+                                    value={editAssignments}
+                                    onChange={setEditAssignments}
+                                    min={0}
+                                    colors={colors}
+                                    primary={primary}
+                                />
+                                <CompactStepper
+                                    label="Experiments"
+                                    value={editExperiments}
+                                    onChange={setEditExperiments}
+                                    min={0}
+                                    colors={colors}
+                                    primary={primary}
+                                />
+                            </View>
 
-                            {/* Assignment Out Of */}
-                            <Stepper
-                                label="Assignment Marks (Out Of)"
-                                value={editAssignmentOutOf}
-                                onChange={setEditAssignmentOutOf}
-                                min={1}
-                                max={100}
-                                colors={colors}
-                                primary={primary}
-                            />
-
-                            {/* Experiment Count */}
-                            <Stepper
-                                label="Experiments"
-                                value={editExperiments}
-                                onChange={setEditExperiments}
-                                min={0}
-                                colors={colors}
-                                primary={primary}
-                            />
-
-                            {/* Experiment Out Of */}
-                            <Stepper
-                                label="Experiment Marks (Out Of)"
-                                value={editExperimentOutOf}
-                                onChange={setEditExperimentOutOf}
-                                min={1}
-                                max={100}
-                                colors={colors}
-                                primary={primary}
-                            />
+                            {/* Max Marks Section */}
+                            <Text style={[styles.modalSectionLabel, { color: colors.text }]}>Max Marks (Out Of)</Text>
+                            <View style={styles.compactStepperGrid}>
+                                <CompactStepper
+                                    label="Assignment"
+                                    value={editAssignmentOutOf}
+                                    onChange={setEditAssignmentOutOf}
+                                    min={1}
+                                    max={100}
+                                    colors={colors}
+                                    primary={primary}
+                                />
+                                <CompactStepper
+                                    label="Experiment"
+                                    value={editExperimentOutOf}
+                                    onChange={setEditExperimentOutOf}
+                                    min={1}
+                                    max={100}
+                                    colors={colors}
+                                    primary={primary}
+                                />
+                            </View>
 
                             {/* Save Button */}
                             <TouchableOpacity
@@ -1113,27 +1160,60 @@ const styles = StyleSheet.create({
         fontSize: FONT_SIZE.md,
         paddingVertical: Platform.OS === 'ios' ? SPACING.md : SPACING.sm + 2,
     },
-    modalInputReadonly: {
-        fontSize: FONT_SIZE.md,
-        paddingVertical: Platform.OS === 'ios' ? SPACING.md : SPACING.sm + 2,
+    compactStepperGrid: {
+        flexDirection: 'row',
+        gap: SPACING.md,
+        marginBottom: SPACING.lg,
     },
-    stepperContainer: { marginBottom: SPACING.lg },
-    stepperLabel: { fontSize: FONT_SIZE.sm, fontWeight: '600', marginBottom: SPACING.sm },
-    stepperRow: {
+    compactStepperContainer: {
+        flex: 1,
+    },
+    compactStepperLabel: {
+        fontSize: FONT_SIZE.xs,
+        fontWeight: '600',
+        marginBottom: SPACING.xs,
+    },
+    compactStepperRow: {
         flexDirection: 'row',
         alignItems: 'center',
         borderRadius: RADIUS.md,
         borderWidth: 1,
         overflow: 'hidden',
+        height: 40,
     },
-    stepperBtn: {
-        width: 52,
-        height: 46,
+    compactStepperBtn: {
+        width: 36,
+        height: 40,
         alignItems: 'center',
         justifyContent: 'center',
     },
-    stepperValueWrap: { flex: 1, alignItems: 'center' },
-    stepperValue: { fontSize: FONT_SIZE.lg, fontWeight: '700' },
+    compactStepperValueWrap: { flex: 1, alignItems: 'center' },
+    compactStepperValue: { fontSize: FONT_SIZE.md, fontWeight: '700' },
+    modalSectionLabel: {
+        fontSize: FONT_SIZE.sm,
+        fontWeight: '700',
+        marginBottom: SPACING.sm,
+    },
+    modalLabelRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        marginBottom: SPACING.sm,
+    },
+    modalRequiredBadge: {
+        paddingHorizontal: 6,
+        paddingVertical: 1,
+        borderRadius: RADIUS.full,
+        marginLeft: SPACING.sm,
+        marginBottom: SPACING.sm,
+    },
+    modalRequiredText: {
+        fontSize: 9,
+        fontWeight: '700',
+    },
+    modalFieldHint: {
+        fontSize: FONT_SIZE.xs,
+        marginTop: SPACING.xs,
+    },
     modalSaveBtn: {
         flexDirection: 'row',
         alignItems: 'center',

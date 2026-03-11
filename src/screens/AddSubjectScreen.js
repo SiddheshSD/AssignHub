@@ -16,30 +16,29 @@ import { useTheme } from '../context/ThemeContext';
 import { useData } from '../context/DataContext';
 import { SPACING, RADIUS, FONT_SIZE } from '../constants/theme';
 
-function Stepper({ label, value, onChange, min = 0, max = 20, colors, primary }) {
+function CompactStepper({ label, value, onChange, min = 0, max = 20, colors, primary }) {
     return (
-        <View style={styles.stepperContainer}>
-            <Text style={[styles.stepperLabel, { color: colors.text }]}>{label}</Text>
-            <View style={[styles.stepperRow, { backgroundColor: colors.surfaceVariant, borderColor: colors.border }]}>
+        <View style={styles.compactStepperContainer}>
+            <Text style={[styles.compactStepperLabel, { color: colors.text }]}>{label}</Text>
+            <View style={[styles.compactStepperRow, { backgroundColor: colors.surfaceVariant, borderColor: colors.border }]}>
                 <TouchableOpacity
-                    style={[styles.stepperBtn, { opacity: value <= min ? 0.3 : 1 }]}
+                    style={[styles.compactStepperBtn, { opacity: value <= min ? 0.3 : 1 }]}
                     onPress={() => value > min && onChange(value - 1)}
                     disabled={value <= min}
                 >
-                    <MaterialCommunityIcons name="minus" size={22} color={primary} />
+                    <MaterialCommunityIcons name="minus" size={18} color={primary} />
                 </TouchableOpacity>
-                <View style={styles.stepperValueWrap}>
-                    <Text style={[styles.stepperValue, { color: colors.text }]}>{value}</Text>
+                <View style={styles.compactStepperValueWrap}>
+                    <Text style={[styles.compactStepperValue, { color: colors.text }]}>{value}</Text>
                 </View>
                 <TouchableOpacity
-                    style={[styles.stepperBtn, { opacity: value >= max ? 0.3 : 1 }]}
+                    style={[styles.compactStepperBtn, { opacity: value >= max ? 0.3 : 1 }]}
                     onPress={() => value < max && onChange(value + 1)}
                     disabled={value >= max}
                 >
-                    <MaterialCommunityIcons name="plus" size={22} color={primary} />
+                    <MaterialCommunityIcons name="plus" size={18} color={primary} />
                 </TouchableOpacity>
             </View>
-            <Text style={[styles.stepperHint, { color: colors.textTertiary }]}>Max: {max}</Text>
         </View>
     );
 }
@@ -49,17 +48,25 @@ export default function AddSubjectScreen({ navigation }) {
     const { addSubject, isDuplicateCode } = useData();
 
     const [name, setName] = useState('');
+    const [shortName, setShortName] = useState('');
     const [code, setCode] = useState('');
     const [assignments, setAssignments] = useState(6);
     const [experiments, setExperiments] = useState(10);
+    const [assignmentOutOf, setAssignmentOutOf] = useState(10);
+    const [experimentOutOf, setExperimentOutOf] = useState(10);
     const [saving, setSaving] = useState(false);
 
     const handleSave = async () => {
         const trimmedName = name.trim();
+        const trimmedShortName = shortName.trim();
         const trimmedCode = code.trim();
 
         if (!trimmedName) {
-            Alert.alert('Validation', 'Please enter a subject name.');
+            Alert.alert('Validation', 'Please enter a subject name (full form).');
+            return;
+        }
+        if (!trimmedShortName) {
+            Alert.alert('Validation', 'Please enter a short name. This is used for folder and file naming.');
             return;
         }
         if (!trimmedCode) {
@@ -74,9 +81,12 @@ export default function AddSubjectScreen({ navigation }) {
         setSaving(true);
         await addSubject({
             name: trimmedName,
+            shortName: trimmedShortName,
             code: trimmedCode.toUpperCase(),
             totalAssignments: assignments,
             totalExperiments: experiments,
+            assignmentOutOf,
+            experimentOutOf,
         });
         setSaving(false);
         navigation.goBack();
@@ -102,20 +112,43 @@ export default function AddSubjectScreen({ navigation }) {
                     contentContainerStyle={styles.scroll}
                     keyboardShouldPersistTaps="handled"
                 >
-                    {/* Subject Name */}
+                    {/* Subject Name (Full Form) */}
                     <View style={styles.fieldGroup}>
-                        <Text style={[styles.label, { color: colors.textSecondary }]}>Subject Name</Text>
+                        <Text style={[styles.label, { color: colors.textSecondary }]}>Subject Name (Full Form)</Text>
                         <View style={[styles.inputWrap, { backgroundColor: colors.card, borderColor: colors.border }]}>
                             <MaterialCommunityIcons name="book-outline" size={20} color={colors.textTertiary} style={styles.inputIcon} />
                             <TextInput
                                 style={[styles.input, { color: colors.text }]}
-                                placeholder="e.g. Data Structures"
+                                placeholder="e.g. Data Structures & Algorithms"
                                 placeholderTextColor={colors.textTertiary}
                                 value={name}
                                 onChangeText={setName}
-                                maxLength={50}
+                                maxLength={80}
                             />
                         </View>
+                        <Text style={[styles.fieldHint, { color: colors.textTertiary }]}>Displayed on the subject page in big size</Text>
+                    </View>
+
+                    {/* Short Name */}
+                    <View style={styles.fieldGroup}>
+                        <View style={styles.labelRow}>
+                            <Text style={[styles.label, { color: colors.textSecondary }]}>Short Name</Text>
+                            <View style={[styles.requiredBadge, { backgroundColor: primary + '18' }]}>
+                                <Text style={[styles.requiredText, { color: primary }]}>Required</Text>
+                            </View>
+                        </View>
+                        <View style={[styles.inputWrap, { backgroundColor: colors.card, borderColor: colors.border }]}>
+                            <MaterialCommunityIcons name="tag-outline" size={20} color={colors.textTertiary} style={styles.inputIcon} />
+                            <TextInput
+                                style={[styles.input, { color: colors.text }]}
+                                placeholder="e.g. DSA"
+                                placeholderTextColor={colors.textTertiary}
+                                value={shortName}
+                                onChangeText={setShortName}
+                                maxLength={20}
+                            />
+                        </View>
+                        <Text style={[styles.fieldHint, { color: colors.textTertiary }]}>Used for folder & file names</Text>
                     </View>
 
                     {/* Subject Code */}
@@ -135,24 +168,49 @@ export default function AddSubjectScreen({ navigation }) {
                         </View>
                     </View>
 
-                    {/* Steppers */}
-                    <Stepper
-                        label="Number of Assignments"
-                        value={assignments}
-                        onChange={setAssignments}
-                        min={0}
-                        colors={colors}
-                        primary={primary}
-                    />
+                    {/* Section: Counts */}
+                    <Text style={[styles.sectionLabel, { color: colors.text }]}>Number of Items</Text>
+                    <View style={styles.compactStepperGrid}>
+                        <CompactStepper
+                            label="Assignments"
+                            value={assignments}
+                            onChange={setAssignments}
+                            min={0}
+                            colors={colors}
+                            primary={primary}
+                        />
+                        <CompactStepper
+                            label="Experiments"
+                            value={experiments}
+                            onChange={setExperiments}
+                            min={0}
+                            colors={colors}
+                            primary={primary}
+                        />
+                    </View>
 
-                    <Stepper
-                        label="Number of Experiments"
-                        value={experiments}
-                        onChange={setExperiments}
-                        min={0}
-                        colors={colors}
-                        primary={primary}
-                    />
+                    {/* Section: Max Marks */}
+                    <Text style={[styles.sectionLabel, { color: colors.text }]}>Max Marks (Out Of)</Text>
+                    <View style={styles.compactStepperGrid}>
+                        <CompactStepper
+                            label="Assignment"
+                            value={assignmentOutOf}
+                            onChange={setAssignmentOutOf}
+                            min={1}
+                            max={100}
+                            colors={colors}
+                            primary={primary}
+                        />
+                        <CompactStepper
+                            label="Experiment"
+                            value={experimentOutOf}
+                            onChange={setExperimentOutOf}
+                            min={1}
+                            max={100}
+                            colors={colors}
+                            primary={primary}
+                        />
+                    </View>
 
                     {/* Save Button */}
                     <TouchableOpacity
@@ -182,8 +240,18 @@ const styles = StyleSheet.create({
     backBtn: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
     headerTitle: { fontSize: FONT_SIZE.xl, fontWeight: '700' },
     scroll: { padding: SPACING.lg, paddingTop: SPACING.sm },
-    fieldGroup: { marginBottom: SPACING.xl },
+    fieldGroup: { marginBottom: SPACING.lg },
+    labelRow: { flexDirection: 'row', alignItems: 'center', marginBottom: SPACING.sm },
     label: { fontSize: FONT_SIZE.sm, fontWeight: '600', marginBottom: SPACING.sm },
+    requiredBadge: {
+        paddingHorizontal: 8,
+        paddingVertical: 2,
+        borderRadius: RADIUS.full,
+        marginLeft: SPACING.sm,
+        marginBottom: SPACING.sm,
+    },
+    requiredText: { fontSize: 10, fontWeight: '700' },
+    fieldHint: { fontSize: FONT_SIZE.xs, marginTop: SPACING.xs },
     inputWrap: {
         flexDirection: 'row',
         alignItems: 'center',
@@ -197,24 +265,47 @@ const styles = StyleSheet.create({
         fontSize: FONT_SIZE.md,
         paddingVertical: Platform.OS === 'ios' ? SPACING.lg : SPACING.md,
     },
-    stepperContainer: { marginBottom: SPACING.xl },
-    stepperLabel: { fontSize: FONT_SIZE.sm, fontWeight: '600', marginBottom: SPACING.sm },
-    stepperRow: {
+    sectionLabel: {
+        fontSize: FONT_SIZE.md,
+        fontWeight: '700',
+        marginBottom: SPACING.md,
+        marginTop: SPACING.sm,
+    },
+    compactStepperGrid: {
+        flexDirection: 'row',
+        gap: SPACING.md,
+        marginBottom: SPACING.lg,
+    },
+    compactStepperContainer: {
+        flex: 1,
+    },
+    compactStepperLabel: {
+        fontSize: FONT_SIZE.xs,
+        fontWeight: '600',
+        marginBottom: SPACING.xs,
+    },
+    compactStepperRow: {
         flexDirection: 'row',
         alignItems: 'center',
-        borderRadius: RADIUS.lg,
+        borderRadius: RADIUS.md,
         borderWidth: 1,
         overflow: 'hidden',
+        height: 42,
     },
-    stepperBtn: {
-        width: 56,
-        height: 52,
+    compactStepperBtn: {
+        width: 38,
+        height: 42,
         alignItems: 'center',
         justifyContent: 'center',
     },
-    stepperValueWrap: { flex: 1, alignItems: 'center' },
-    stepperValue: { fontSize: FONT_SIZE.xl, fontWeight: '700' },
-    stepperHint: { fontSize: FONT_SIZE.xs, marginTop: SPACING.xs },
+    compactStepperValueWrap: {
+        flex: 1,
+        alignItems: 'center',
+    },
+    compactStepperValue: {
+        fontSize: FONT_SIZE.md,
+        fontWeight: '700',
+    },
     saveBtn: {
         flexDirection: 'row',
         alignItems: 'center',

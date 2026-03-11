@@ -132,7 +132,7 @@ function PerformanceChart({ subjects, isDark, colors, primary }) {
         const expAvgPct = expAvg !== null ? (expAvg / eOutOf) * 100 : null;
 
         return {
-            name: s.name,
+            name: s.shortName || s.name,
             assignPct: assignAvgPct,
             expPct: expAvgPct,
             assignAvg: assignAvg !== null ? assignAvg.toFixed(1) : null,
