@@ -2,6 +2,12 @@
 
 **AssignHub** is a premium, offline-first mobile application expertly designed to help students systematically manage, track, and optimize their academic progress. Built with React Native and Expo, the app features a highly intuitive user interface seamlessly managing subjects, assignments, experiments, and associated files—all without needing an internet connection.
 
+## Downloads / Releases
+
+Download the specific version installed builds below (APK configurations generated via EAS). 
+
+- **Google Drive Link**: [Click Here](https://drive.google.com/drive/folders/1RECwV0rwrAiPl82LuolTIQX2IPjF2Oov?usp=sharing)
+
 ## ✨ Features
 
 - **📊 Intelligent Dashboard**: 
@@ -90,18 +96,6 @@ AssignHUB/
 - **Subjects Setup**: Tap the 'Subjects' tab at the bottom and hit the powerful `+` button in the top right.
 - **Details and Marks**: From any subject's Detail screen, tap to toggle item statuses, input achieved marks, or attach related files/receipts directly to an assignment item. All configurations accurately persist instantly.
 - **Theme and Info**: Manage global settings including UI aesthetics (Dark Mode) or visit the About section to see credits and external references in the 'Settings' tab.
-
-## 📥 Downloads / Releases
-
-Download the specific version installed builds below (APK/AAB configurations generated via EAS). I've left the placeholder `URL_HERE` strings for you to paste your specific Expo download links!
-
-- [Version 1.2.5 (Latest)](https://expo.dev/accounts/siddhesh_2005/projects/AssignHUB/builds/cfc564cd-5116-4ca7-bc0c-fee7699a9f9d)
-- [Version 1.2.4](https://expo.dev/accounts/siddhesh_2005/projects/AssignHUB/builds/44041141-a05d-4af7-a075-63ff000e5abe)
-- [Version 1.2.2](https://expo.dev/accounts/siddhesh_2005/projects/AssignHUB/builds/3ea6c312-e769-4c5b-bcfe-66a9915c2305)
-- [Version 1.2.1](https://expo.dev/accounts/siddhesh_2005/projects/AssignHUB/builds/d65b0d43-931c-4506-9fc0-8be0ad62316b)
-- [Version 1.2.0](https://expo.dev/accounts/siddhesh_2005/projects/AssignHUB/builds/8ee5a044-1cb6-4fc8-9e39-fe601b7e0e17)
-- [Version 1.1.0](https://expo.dev/accounts/siddhesh_2005/projects/AssignHUB/builds/b6818a21-ac26-48e6-a4fa-de32e1d27f21)
-- [Version 1.0.0](https://expo.dev/accounts/siddhesh_2005/projects/AssignHUB/builds/69aa9150-e547-437d-a908-87ba89ac994a)
 
 ---
 Built with ❤️ for students executing with total focus.
